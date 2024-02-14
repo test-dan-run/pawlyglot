@@ -1,0 +1,7 @@
+# docker build -t dleongsh/pawlyglot-vad:2.0.1-cuda11.7-cudnn8-runtime -f dockerfile.vad .
+FROM dleongsh/torchaudio:2.0.1-cuda11.7-cudnn8-runtime
+
+RUN python3 -m pip install --no-cache-dir speechbrain==0.5.16
+
+# preload model weights into docker image
+RUN python3 -c 'from speechbrain.pretrained import VAD; VAD = VAD.from_hparams(source="speechbrain/vad-crdnn-libriparty", savedir="pretrained_models/vad-crdnn-libriparty")'

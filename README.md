@@ -8,6 +8,7 @@
 
 Currently, the plan is to use the following projects:
 
+1. Voice Activity Detection - SpeechBrain CRDNN
 1. Speech Recognition - NVIDIA NeMo Parakeet-CTC (600M)
 2. Machine Translation - Meta NLLB-200-Distilled (600M)
 3. Voice Cloning and TTS - Coqui XTTS-V2
