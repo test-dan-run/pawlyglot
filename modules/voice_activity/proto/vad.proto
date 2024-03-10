@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package vad;
+
+service VoiceActivityDetector {
+    rpc Detect(stream DetectRequest) returns (DetectResponse) {}
+}
+
+message DetectRequest {
+    bytes buffer = 1;
+}
+
+message DetectResponse {
+    string b64array = 1;
+}

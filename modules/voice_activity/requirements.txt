@@ -1,0 +1,4 @@
+speechbrain==1.0.0
+fastapi==0.110.0
+grpcio==1.62.1
+grpcio-tools==1.62.1
