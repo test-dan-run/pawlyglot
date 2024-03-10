@@ -1,4 +1,4 @@
-# docker build -t dleongsh/torchaudio:2.0.1-cuda11.7-cudnn8-runtime -f dockerfile.base .
+# docker build -t pawlyglot/torchaudio:2.0.1-cuda11.7-cudnn8-runtime -f dockerfile.base .
 
 ARG PYTORCH_VERSION=2.0.1
 ARG CUDA_VERSION=11.7

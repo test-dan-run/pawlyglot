@@ -1,6 +1,5 @@
-# docker build -t dleongsh/pawlyglot-vad:1.0.0 -f dockerfile .
-# docker run --rm -it dleongsh/pawlyglot-vad:1.0.0 -v ./src:./src -p 50052:50052 bash
-FROM dleongsh/torchaudio:2.0.1-cuda11.7-cudnn8-runtime
+# docker build -t pawlyglot/vad:1.0.0 -f dockerfile.vad .
+FROM pawlyglot/torchaudio:2.0.1-cuda11.7-cudnn8-runtime
 
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
