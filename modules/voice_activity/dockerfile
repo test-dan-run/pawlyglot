@@ -1,4 +1,5 @@
 # docker build -t dleongsh/pawlyglot-vad:1.0.0 -f dockerfile .
+# docker run --rm -it dleongsh/pawlyglot-vad:1.0.0 -v ./src:./src -p 50052:50052 bash
 FROM dleongsh/torchaudio:2.0.1-cuda11.7-cudnn8-runtime
 
 COPY requirements.txt .
@@ -9,7 +10,7 @@ COPY src ./src
 COPY proto ./proto
 
 # preload model weights into docker image
-RUN python3 -c 'from speechbrain.inference.VAD import VAD; VAD = VAD.from_hparams(source="speechbrain/vad-crdnn-libriparty", savedir="pretrained_models/vad-crdnn-libriparty")'
+RUN python3 -c 'from speechbrain.inference.VAD import VAD; import os; VAD = VAD.from_hparams(source="speechbrain/vad-crdnn-libriparty", savedir="pretrained_models/vad-crdnn-libriparty")'
 
 # setup protobuf
 RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/vad.proto

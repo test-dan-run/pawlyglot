@@ -3,7 +3,7 @@ syntax = "proto3";
 package vad;
 
 service VoiceActivityDetector {
-    rpc Detect(stream DetectRequest) returns (DetectResponse) {}
+    rpc detect(stream DetectRequest) returns (DetectResponse) {}
 }
 
 message DetectRequest {
