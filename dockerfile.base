@@ -1,4 +1,4 @@
-# docker build -t pawlyglot/torchaudio:2.0.1-cuda11.7-cudnn8-runtime -f dockerfile.base .
+# docker build -t pawlyglot/base:1.0.0 -f dockerfile.base .
 
 ARG PYTORCH_VERSION=2.0.1
 ARG CUDA_VERSION=11.7
@@ -21,9 +21,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     apt-get clean && rm -rf /tmp/* /var/tmp/* /var/lib/apt/lists/* && apt-get -y autoremove && \
     rm -rf /var/cache/apt/archives/
 
-RUN python3 -m pip install --upgrade --no-cache-dir pip==24.0 setuptools==69.1.0 wheel==0.42.0 && \
-    python3 -m pip install --no-cache-dir Cython==3.0.8 && \
-    python3 -m pip install --no-cache-dir librosa==0.9.2 soundfile==0.10.3.post1 && \
-    python3 -m pip install --no-cache-dir torchaudio==2.0.2
+COPY requirements.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /workspace
