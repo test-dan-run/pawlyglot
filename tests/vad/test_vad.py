@@ -1,26 +1,25 @@
 """ Script to test VAD model serving instance 
 
 # generate protobufs
-python3 -m grpc_tools.protoc -I ../proto \
-    --python_out=. \
-    --pyi_out=. \
-    --grpc_python_out=. \
-    ../proto/vad.proto
+python3 -m grpc_tools.protoc -I ./proto \
+    --python_out=./tests/vad \
+    --pyi_out=./tests/vad \
+    --grpc_python_out=./tests/vad \
+    ./proto/base.proto
+    ./proto/vad.proto
 
 """
 
 import os
-import base64
 import logging
 
 import grpc
-import numpy as np
 
 import vad_pb2
 import vad_pb2_grpc
 
 CHUNK_SIZE = 1024 * 1024
-SAMPLE_AUDIO_PATH = "examples/test_audio.wav"
+SAMPLE_AUDIO_PATH = "../examples/test_audio.wav"
 
 
 def get_file_chunks(filepath: str):

@@ -1,0 +1,20 @@
+# docker build -t pawlyglot/vad:1.0.0 -f dockerfile.vad .
+FROM pawlyglot/base:1.0.0
+
+COPY build/requirements.vad.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.vad.txt
+
+WORKDIR /vad
+
+# preload model weights into docker image
+RUN python3 -c 'from speechbrain.inference.VAD import VAD; import os; VAD = VAD.from_hparams(source="speechbrain/vad-crdnn-libriparty", savedir="pretrained_models/vad-crdnn-libriparty")'
+
+# setup protobuf
+RUN mkdir ./proto
+COPY proto/base.proto ./proto/base.proto
+COPY proto/vad.proto ./proto/vad.proto
+
+COPY modules/voice_activity ./src
+RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/base.proto ./proto/vad.proto
+
+CMD ["python3", "src/serve.py"]

@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package vad;
 
+import "base.proto";
+
 service VoiceActivityDetector {
     rpc detect(stream DetectRequest) returns (DetectResponse) {}
 }
@@ -11,10 +13,5 @@ message DetectRequest {
 }
 
 message DetectResponse {
-    repeated Timestamp timestamps = 1;
-}
-
-message Timestamp {
-    float start = 1;
-    float end = 2;
+    repeated base.Timestamp timestamps = 1;
 }
