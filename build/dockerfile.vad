@@ -14,7 +14,7 @@ RUN mkdir ./proto
 COPY proto/base.proto ./proto/base.proto
 COPY proto/vad.proto ./proto/vad.proto
 
-COPY modules/voice_activity ./src
+COPY modules/voice_activity/src ./src
 RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/base.proto ./proto/vad.proto
 
 CMD ["python3", "src/serve.py"]
