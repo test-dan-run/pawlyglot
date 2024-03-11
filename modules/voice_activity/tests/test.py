@@ -46,10 +46,8 @@ def run():
         )
 
         # decode bytes to array, reshape is needed as frombuffer outputs 1d-array
-        boundaries_buffer = base64.b64decode(response.b64array)
-        boundaries = np.frombuffer(boundaries_buffer, np.float32).reshape((-1, 2))
-        print(boundaries)
-
+        timestamps = response.timestamps
+        print(timestamps)
 
 if __name__ == "__main__":
     logging.basicConfig()

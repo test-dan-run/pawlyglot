@@ -1,7 +1,6 @@
 """ VAD server scripts """
 
 import os
-import base64
 import logging
 import tempfile
 from concurrent import futures
@@ -45,13 +44,11 @@ class VADServer(vad_pb2_grpc.VoiceActivityDetectorServicer):
         save_chunks_to_file(request_iterator, tmp.name)
         logging.info("File loaded and saved to: %s", tmp.name)
 
-        boundaries = self.vad.get_speech_segments(tmp.name).numpy()
+        boundaries = self.vad.get_speech_segments(tmp.name).tolist()
         logging.info(" Boundaries detected: %s", boundaries)
+        timestamps = [vad_pb2.Timestamp(start=start, end=end) for start, end in boundaries]
 
-        response = base64.b64encode(boundaries)
-        tmp.flush()
-
-        return vad_pb2.DetectResponse(b64array=response)
+        return vad_pb2.DetectResponse(timestamps=timestamps)
 
 
 def serve():
