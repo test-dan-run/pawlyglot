@@ -3,6 +3,7 @@
 import os
 import base64
 import logging
+import tempfile
 from concurrent import futures
 
 import grpc
@@ -23,8 +24,6 @@ class VADServer(vad_pb2_grpc.VoiceActivityDetectorServicer):
     """VAD Model Server instance"""
 
     def __init__(self):
-        self.tmp_dir = "./tmp"
-        os.makedirs(self.tmp_dir, exist_ok=True)
         self.vad = VAD.from_hparams(
             source="speechbrain/vad-crdnn-libriparty",
             savedir="pretrained_models/vad-crdnn-libriparty",
@@ -40,22 +39,23 @@ class VADServer(vad_pb2_grpc.VoiceActivityDetectorServicer):
             if key != "filename":
                 continue
             filename = value
-
         assert isinstance(filename, str), "Filename metadata not found in request."
 
-        output_path = os.path.join(self.tmp_dir, filename)
-        save_chunks_to_file(request_iterator, output_path)
-        logging.info("File loaded and saved to: %s", filename)
+        tmp = tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[-1])
+        save_chunks_to_file(request_iterator, tmp.name)
+        logging.info("File loaded and saved to: %s", tmp.name)
 
-        boundaries = self.vad.get_speech_segments(output_path).numpy()
+        boundaries = self.vad.get_speech_segments(tmp.name).numpy()
         logging.info(" Boundaries detected: %s", boundaries)
 
         response = base64.b64encode(boundaries)
+        tmp.flush()
+
         return vad_pb2.DetectResponse(b64array=response)
 
 
 def serve():
-    """ Serves VAD Model """
+    """Serves VAD Model"""
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
     vad_pb2_grpc.add_VoiceActivityDetectorServicer_to_server(VADServer(), server)
