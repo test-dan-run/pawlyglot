@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package asr;
+
+service SpeechRecognizer {
+    rpc recognize(stream RecognizeRequest) returns (RecognizeResponse) {}
+}
+
+message RecognizeRequest {
+    string buffer = 1;
+}
+
+message RecognizeResponse {
+    string transcription = 1;
+}

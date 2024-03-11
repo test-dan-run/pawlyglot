@@ -1,0 +1,17 @@
+# docker build -t pawlyglot/asr:1.0.0 -f dockerfile.asr .
+FROM pawlyglot/base:1.0.0
+
+COPY build/requirements.asr.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.asr.txt
+
+WORKDIR /asr
+# copy in weights as well
+COPY modules/speech_recognition/models ./models
+COPY modules/speech_recognition/src ./src
+
+# setup protobuf
+RUN mkdir ./proto
+COPY proto/asr.proto ./proto/asr.proto
+RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/asr.proto
+
+CMD ["python3", "src/serve.py"]
