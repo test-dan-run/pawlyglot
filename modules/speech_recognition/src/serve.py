@@ -42,14 +42,15 @@ class ASRServer(asr_pb2_grpc.SpeechRecognizerServicer):
 
         audio_tensor = audio_tensor.unsqueeze(0)
 
-        logits, logits_len, _ = self.model.forward(
-                            input_signal=audio_tensor.to(MAP_LOCATION), 
-                            input_signal_length=audio_length_tensor.to(MAP_LOCATION),
-                        )
-        
-        hypotheses, _ = self.model.decoding.ctc_decoder_predictions_tensor(
-                            logits, decoder_lengths=logits_len,
-                        )
+        with torch.no_grad():
+            logits, logits_len, _ = self.model.forward(
+                                input_signal=audio_tensor.to(MAP_LOCATION), 
+                                input_signal_length=audio_length_tensor.to(MAP_LOCATION),
+                            )
+            
+            hypotheses, _ = self.model.decoding.ctc_decoder_predictions_tensor(
+                                logits, decoder_lengths=logits_len,
+                            )
 
         return asr_pb2.RecognizeResponse(transcription=hypotheses[0])
 
