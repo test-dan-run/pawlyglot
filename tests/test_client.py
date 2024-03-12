@@ -7,7 +7,8 @@ python3 -m grpc_tools.protoc -I ./proto \
     --grpc_python_out=./tests \
     ./proto/base.proto \
     ./proto/asr.proto \
-    ./proto/vad.proto
+    ./proto/vad.proto \
+    ./proto/mt.proto
 
 """
 
@@ -19,6 +20,7 @@ import librosa
 import grpc
 import asr_pb2, asr_pb2_grpc
 import vad_pb2, vad_pb2_grpc
+import mt_pb2, mt_pb2_grpc
 
 CHUNK_SIZE = 1024 * 1024
 SAMPLE_AUDIO_PATH = "../examples/test_audio.wav"
@@ -48,6 +50,7 @@ def get_encoded_chunks(encoded: str):
 def run():
     """ Sends audio file to model serving instance """
 
+    # VAD
     with grpc.insecure_channel("localhost:50052") as channel:
         stub = vad_pb2_grpc.VoiceActivityDetectorStub(channel)
         chunks_generator = get_file_chunks(SAMPLE_AUDIO_PATH)
@@ -59,18 +62,31 @@ def run():
     # decode bytes to array, reshape is needed as frombuffer outputs 1d-array
     timestamps = response.timestamps
     audio_arr, _ = librosa.load(SAMPLE_AUDIO_PATH, sr=SAMPLE_RATE, mono=True)
-    for ts in timestamps:
 
-        with grpc.insecure_channel("localhost:50053") as channel:
-            stub = asr_pb2_grpc.SpeechRecognizerStub(channel)
+    # ASR
+    transcriptions = []
+    with grpc.insecure_channel("localhost:50053") as channel:
+        stub = asr_pb2_grpc.SpeechRecognizerStub(channel)
 
+        for ts in timestamps:
             start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
             segment = audio_arr[start:end]
 
             b64encoded = base64.b64encode(segment)
             chunks_generator = get_encoded_chunks(b64encoded)
             response = stub.recognize(chunks_generator)
-            print(response.transcription)
+            transcriptions.append(response.transcription)
+
+    # Translate
+    translations = []
+    with grpc.insecure_channel("localhost:50054") as channel:
+        stub = mt_pb2_grpc.TranslatorStub(channel)
+
+        for ts in transcriptions:
+            response = stub.translate(mt_pb2.TranslateRequest(text=ts))
+            translations.append(response.translation)
+            print(response.translation)
+
 
 
 if __name__ == "__main__":
