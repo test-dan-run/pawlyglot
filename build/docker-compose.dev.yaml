@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+
+  vc:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/vc:1.0.0
+    build:
+      context: ../
+      dockerfile: build/dockerfile.vc
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    volumes:
+      - ../modules/voice_cloning:/workspace
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb
