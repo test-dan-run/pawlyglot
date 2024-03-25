@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+
+  vad:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/vad:1.0.0
+    build:
+      context: ../
+      dockerfile: build/dockerfile.vad
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50052:50052
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  
+
+  asr:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/asr:1.1.0
+    build:
+      context: ../
+      dockerfile: build/dockerfile.asr
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50053:50053
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb
+
+  mt:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/mt:1.0.0
+    build:
+      context: ../
+      dockerfile: build/dockerfile.mt
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50054:50054
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  

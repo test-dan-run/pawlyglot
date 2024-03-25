@@ -1,4 +1,4 @@
-# docker build -t pawlyglot/mt:1.0.0 -f dockerfile.mt .
+# docker build -t pawlyglot/mt:1.0.0 -f build/dockerfile.mt .
 FROM pawlyglot/base:1.0.0
 
 COPY build/requirements.mt.txt .
