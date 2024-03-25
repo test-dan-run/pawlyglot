@@ -5,27 +5,21 @@ import logging
 from concurrent import futures
 
 import grpc
-import torch
 import numpy as np
-from nemo.collections.asr.models import EncDecCTCModelBPE
+from faster_whisper import WhisperModel
 
 import asr_pb2
 import asr_pb2_grpc
 
-if torch.cuda.is_available():
-    DEVICE = [0]  # use 0th CUDA device
-    ACCELERATOR = 'gpu'
-else:
-    DEVICE = 1
-    ACCELERATOR = 'cpu'
-
-MAP_LOCATION = torch.device(f'cuda:{DEVICE[0]}' if ACCELERATOR == 'gpu' else 'cpu')
+MODEL_DIR = "/asr/models/small"
+DEVICE = "cuda"  # cuda or cpu
+COMPUTE_TYPE = "float32"
 
 class ASRServer(asr_pb2_grpc.SpeechRecognizerServicer):
     """ASR Model Server instance"""
 
     def __init__(self):
-        self.model = EncDecCTCModelBPE.restore_from(restore_path="/asr/models/parakeet-ctc-0.6b.nemo")
+        self.model = WhisperModel(MODEL_DIR, device=DEVICE, compute_type=COMPUTE_TYPE)
 
     def recognize(self, request_iterator: asr_pb2.RecognizeRequest, context):
         """Takes in audio file and generates transcription, returns string"""
@@ -37,22 +31,14 @@ class ASRServer(asr_pb2_grpc.SpeechRecognizerServicer):
         b64decoded = base64.b64decode(b64encoded)
         audio_array = np.frombuffer(b64decoded, dtype=np.float32)
 
-        audio_tensor = torch.from_numpy(audio_array)
-        audio_length_tensor = torch.tensor([audio_tensor.size(dim=0)])
+        transcript = ""
+        segments, _ = self.model.transcribe(audio_array, beam_size=5, language="en")
+        for segment in segments:
+            transcript += segment.text
 
-        audio_tensor = audio_tensor.unsqueeze(0)
+        transcript = transcript.strip()
 
-        with torch.no_grad():
-            logits, logits_len, _ = self.model.forward(
-                                input_signal=audio_tensor.to(MAP_LOCATION), 
-                                input_signal_length=audio_length_tensor.to(MAP_LOCATION),
-                            )
-            
-            hypotheses, _ = self.model.decoding.ctc_decoder_predictions_tensor(
-                                logits, decoder_lengths=logits_len,
-                            )
-
-        return asr_pb2.RecognizeResponse(transcription=hypotheses[0])
+        return asr_pb2.RecognizeResponse(transcription=transcript)
 
 
 def serve():
