@@ -44,7 +44,25 @@ class VADServer(vad_pb2_grpc.VoiceActivityDetectorServicer):
         save_chunks_to_file(request_iterator, tmp.name)
         logging.info("File loaded and saved to: %s", tmp.name)
 
-        boundaries = self.vad.get_speech_segments(tmp.name).tolist()
+        # 1- Let's compute frame-level posteriors first
+        prob_chunks = self.vad.get_speech_prob_file(tmp.name)
+
+        # 2- Let's apply a threshold on top of the posteriors
+        prob_th = self.vad.apply_threshold(prob_chunks).float()
+
+        # 3- Let's now derive the candidate speech segments
+        boundaries = self.vad.get_boundaries(prob_th)
+
+        # 4- Apply energy VAD within each candidate speech segment (optional)
+        boundaries = self.vad.energy_VAD(tmp.name, boundaries)
+
+        # 5- Merge segments that are too close
+        boundaries = self.vad.merge_close_segments(boundaries, close_th=0.550)
+
+        # 6- Remove segments that are too short
+        boundaries = self.vad.remove_short_segments(boundaries, len_th=0.250)
+
+        boundaries = boundaries.tolist()
         logging.info(" Boundaries detected: %s", boundaries)
         timestamps = [vad_pb2.Timestamp(start=start, end=end) for start, end in boundaries]
 

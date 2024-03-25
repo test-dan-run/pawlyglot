@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-package base;
-
-message Timestamp {
-    float start = 1;
-    float end = 2;
-}
