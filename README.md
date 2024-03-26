@@ -27,7 +27,7 @@ Currently, the plan is to use the following projects.
 ```sh
 git clone https://github.com/test-dan-run/pawlyglot.git
 cd pawlyglot
-docker build -f build/dockerfile.base .
+docker build -f build/dockerfile.base -t pawlyglot/base:1.0.0 .
 ```
 
 2. Download the pretrained models
