@@ -1,8 +1,8 @@
-# docker build -t pawlyglot/asr:1.1.0 -f build/dockerfile.asr2 .
+# docker build -t pawlyglot/asr:1.1.0 -f build/dockerfile.asr .
 FROM pawlyglot/base:1.0.0
 
-COPY build/requirements.asr2.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.asr2.txt
+COPY build/requirements.asr.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.asr.txt
 
 WORKDIR /asr
 
@@ -11,7 +11,7 @@ RUN mkdir ./proto
 COPY proto/asr.proto ./proto/asr.proto
 
 COPY modules/speech_recognition/models/small ./models/small
-COPY modules/speech_recognition/src2 ./src
+COPY modules/speech_recognition/src ./src
 RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/asr.proto
 
 # set explicit directory path to libcudnn

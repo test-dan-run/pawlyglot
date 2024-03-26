@@ -32,7 +32,7 @@ docker build -f build/dockerfile.base .
 
 2. Download the pretrained models
     - Actually all of the models are hot-loaded on build/start-up. Only the ASR model ain't. I need to standardise this lol. But whateva for now. 
-    - Download the ASR model files stuff via this [link here]()
+    - Download the ASR model files stuff via this [link here](https://drive.google.com/file/d/1Y4WkFfLaOoFZ4G78xhWatnMzyyQy5g0J/view?usp=sharing)
     - Extract contents into `./modules/speech_recognition/models/small`
 
 3. Build the rest of the services
