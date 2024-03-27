@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import asyncio
 from concurrent import futures
 
 import grpc
@@ -41,18 +42,18 @@ class ASRServer(asr_pb2_grpc.SpeechRecognizerServicer):
         return asr_pb2.RecognizeResponse(transcription=transcript)
 
 
-def serve():
-    """ Serves VAD Model """
+async def serve():
+    """ Serves ASR Model Asynchronously """
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=4))
     asr_pb2_grpc.add_SpeechRecognizerServicer_to_server(ASRServer(), server)
     server.add_insecure_port("[::]:50053")
-    server.start()
+    await server.start()
 
     print("Server started, listening on port 50053")
-    server.wait_for_termination()
+    await server.wait_for_termination()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    serve()
+    asyncio.run(serve())

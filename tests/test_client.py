@@ -5,6 +5,34 @@ python3 -m grpc_tools.protoc -I ./proto \
     --python_out=./tests \
     --pyi_out=./tests \
     --grpc_python_out=./tests \
+    ./proto/asr.proto \
+    ./proto/vad.proto \
+    ./proto/mt.proto
+
+"""
+
+import os
+import base64
+import logging
+import librosa
+import numpy as np
+from typing import Dict, Any
+
+import grpc
+import asr_pb2, asr_pb2_grpc
+import vad_pb2, vad_pb2_grpc
+import mt_pb2, mt_pb2_grpc
+
+CHUNK_SIZE = 1024 * 1024
+SAMPLE_AUDIO_PATH = "../examples/test_audio.wav"
+SAMPLE_RATE = 16000
+""" Script to test VAD model serving instance 
+
+# generate protobufs
+python3 -m grpc_tools.protoc -I ./proto \
+    --python_out=./tests \
+    --pyi_out=./tests \
+    --grpc_python_out=./tests \
     ./proto/base.proto \
     ./proto/asr.proto \
     ./proto/vad.proto \
@@ -14,6 +42,7 @@ python3 -m grpc_tools.protoc -I ./proto \
 
 import os
 import base64
+import asyncio
 import logging
 import librosa
 
@@ -25,6 +54,27 @@ import mt_pb2, mt_pb2_grpc
 CHUNK_SIZE = 1024 * 1024
 SAMPLE_AUDIO_PATH = "../examples/test_audio.wav"
 SAMPLE_RATE = 16000
+
+async def transcribe(
+        number: int, 
+        array: np.ndarray, 
+        ts: vad_pb2.Timestamp
+    ) -> Dict[str, Any]:
+
+    start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
+    segment = array[start:end]
+
+    b64encoded = base64.b64encode(segment)
+    chunks_generator = get_encoded_chunks(b64encoded)
+
+    async with grpc.aio.insecure_channel("localhost:50053") as channel:
+        stub = asr_pb2_grpc.SpeechRecognizerStub(channel)
+
+        response = await stub.recognize(chunks_generator)
+        # response = await asyncio.wait_for(stub.recognize(chunks_generator), 10)
+
+    return {"number": number, "text": response.transcription}
+
 
 def get_file_chunks(filepath: str):
     """ Splits audio file into chunks """
@@ -47,8 +97,14 @@ def get_encoded_chunks(encoded: str):
         idx += 1
         yield asr_pb2.RecognizeRequest(buffer=piece)
 
-def run():
+async def run():
     """ Sends audio file to model serving instance """
+
+    transcriptions = {}
+    transcription_tasks = []
+    def process_transcription_response(response: str):
+        logging.info(f"Received response for {response}")
+        transcriptions[response["number"]] = response["text"]
 
     # VAD
     with grpc.insecure_channel("localhost:50052") as channel:
@@ -64,31 +120,25 @@ def run():
     audio_arr, _ = librosa.load(SAMPLE_AUDIO_PATH, sr=SAMPLE_RATE, mono=True)
 
     # ASR
-    transcriptions = []
-    with grpc.insecure_channel("localhost:50053") as channel:
-        stub = asr_pb2_grpc.SpeechRecognizerStub(channel)
+    for i in range(len(timestamps)):
+        task = asyncio.create_task(transcribe(i, audio_arr, timestamps[i]))
+        task.add_done_callback(lambda t: process_transcription_response(t.result()))
 
-        for ts in timestamps:
-            start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
-            segment = audio_arr[start:end]
+        transcription_tasks.append(task)
 
-            b64encoded = base64.b64encode(segment)
-            chunks_generator = get_encoded_chunks(b64encoded)
-            response = stub.recognize(chunks_generator)
-            transcriptions.append(response.transcription)
+    await asyncio.gather(*transcription_tasks, return_exceptions=True)
 
     # Translate
     translations = []
     with grpc.insecure_channel("localhost:50054") as channel:
         stub = mt_pb2_grpc.TranslatorStub(channel)
 
-        for ts in transcriptions:
-            response = stub.translate(mt_pb2.TranslateRequest(text=ts))
+        for i in range(len(timestamps)):
+            response = stub.translate(mt_pb2.TranslateRequest(text=transcriptions[i]))
             translations.append(response.translation)
             print(response.translation)
 
 
-
 if __name__ == "__main__":
-    logging.basicConfig()
-    run()
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(run())
