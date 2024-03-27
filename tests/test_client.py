@@ -75,6 +75,15 @@ async def transcribe(
 
     return {"number": number, "text": response.transcription}
 
+async def translate(number: int, text: str) -> Dict[str, Any]:
+
+    async with grpc.aio.insecure_channel("localhost:50054") as channel:
+        stub = mt_pb2_grpc.TranslatorStub(channel)
+
+        response = await stub.translate(mt_pb2.TranslateRequest(text=text))
+        # response = await asyncio.wait_for(stub.translate(mt_pb2.TranslateRequest(text=text)), 10)
+
+    return {"number": number, "text": response.translation}
 
 def get_file_chunks(filepath: str):
     """ Splits audio file into chunks """
@@ -106,6 +115,12 @@ async def run():
         logging.info(f"Received response for {response}")
         transcriptions[response["number"]] = response["text"]
 
+    translations = {}
+    translation_tasks = []
+    def process_translation_response(response: str):
+        logging.info(f"Received response for {response}")
+        translations[response["number"]] = response["text"]
+
     # VAD
     with grpc.insecure_channel("localhost:50052") as channel:
         stub = vad_pb2_grpc.VoiceActivityDetectorStub(channel)
@@ -129,14 +144,13 @@ async def run():
     await asyncio.gather(*transcription_tasks, return_exceptions=True)
 
     # Translate
-    translations = []
-    with grpc.insecure_channel("localhost:50054") as channel:
-        stub = mt_pb2_grpc.TranslatorStub(channel)
+    for i in range(len(timestamps)):
+        task = asyncio.create_task(translate(i, transcriptions[i]))
+        task.add_done_callback(lambda t: process_translation_response(t.result()))
 
-        for i in range(len(timestamps)):
-            response = stub.translate(mt_pb2.TranslateRequest(text=transcriptions[i]))
-            translations.append(response.translation)
-            print(response.translation)
+        translation_tasks.append(task)
+
+    await asyncio.gather(*translation_tasks, return_exceptions=True)
 
 
 if __name__ == "__main__":

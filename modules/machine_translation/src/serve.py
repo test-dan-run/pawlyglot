@@ -1,6 +1,7 @@
 """ MT server scripts """
 
 import logging
+import asyncio
 from concurrent import futures
 
 import grpc
@@ -29,17 +30,17 @@ class MTServer(mt_pb2_grpc.TranslatorServicer):
 
         return mt_pb2.TranslateResponse(translation=translation)
     
-def serve():
+async def serve():
     """ Serves MT Model """
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=4))
     mt_pb2_grpc.add_TranslatorServicer_to_server(MTServer(), server)
     server.add_insecure_port("[::]:50054")
-    server.start()
+    await server.start()
 
     print("Server started, listening on port 50054")
-    server.wait_for_termination()
+    await server.wait_for_termination()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    serve()
+    asyncio.run(serve())
