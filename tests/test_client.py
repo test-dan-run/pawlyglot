@@ -58,13 +58,9 @@ SAMPLE_RATE = 16000
 async def transcribe(
         number: int, 
         array: np.ndarray, 
-        ts: vad_pb2.Timestamp
     ) -> Dict[str, Any]:
 
-    start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
-    segment = array[start:end]
-
-    b64encoded = base64.b64encode(segment)
+    b64encoded = base64.b64encode(array)
     chunks_generator = get_encoded_chunks(b64encoded)
 
     async with grpc.aio.insecure_channel("localhost:50053") as channel:
@@ -84,6 +80,14 @@ async def translate(number: int, text: str) -> Dict[str, Any]:
         # response = await asyncio.wait_for(stub.translate(mt_pb2.TranslateRequest(text=text)), 10)
 
     return {"number": number, "text": response.translation}
+
+async def pipeline(number: int, array: np.ndarray) -> Dict[str, Any]:
+
+    response = await transcribe(number, array)
+    response = await translate(number, response["text"])
+
+    return response
+
 
 def get_file_chunks(filepath: str):
     """ Splits audio file into chunks """
@@ -109,17 +113,11 @@ def get_encoded_chunks(encoded: str):
 async def run():
     """ Sends audio file to model serving instance """
 
-    transcriptions = {}
-    transcription_tasks = []
-    def process_transcription_response(response: str):
+    results = {}
+    tasks = []
+    def process_pipeline_response(response: str):
         logging.info(f"Received response for {response}")
-        transcriptions[response["number"]] = response["text"]
-
-    translations = {}
-    translation_tasks = []
-    def process_translation_response(response: str):
-        logging.info(f"Received response for {response}")
-        translations[response["number"]] = response["text"]
+        results[response["number"]] = response["text"]
 
     # VAD
     with grpc.insecure_channel("localhost:50052") as channel:
@@ -134,24 +132,15 @@ async def run():
     timestamps = response.timestamps
     audio_arr, _ = librosa.load(SAMPLE_AUDIO_PATH, sr=SAMPLE_RATE, mono=True)
 
-    # ASR
-    for i in range(len(timestamps)):
-        task = asyncio.create_task(transcribe(i, audio_arr, timestamps[i]))
-        task.add_done_callback(lambda t: process_transcription_response(t.result()))
+    for idx, ts in enumerate(timestamps):
+        start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
+        segment = audio_arr[start:end]
+        task = asyncio.create_task(pipeline(idx, segment))
+        task.add_done_callback(lambda t: process_pipeline_response(t.result()))
 
-        transcription_tasks.append(task)
+        tasks.append(task)
 
-    await asyncio.gather(*transcription_tasks, return_exceptions=True)
-
-    # Translate
-    for i in range(len(timestamps)):
-        task = asyncio.create_task(translate(i, transcriptions[i]))
-        task.add_done_callback(lambda t: process_translation_response(t.result()))
-
-        translation_tasks.append(task)
-
-    await asyncio.gather(*translation_tasks, return_exceptions=True)
-
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
