@@ -16,7 +16,7 @@ Currently, the plan is to use the following projects.
 | 1 | Voice Activity Detection | [SpeechBrain CRDNN](https://huggingface.co/speechbrain/vad-crdnn-libriparty) | Yes |
 | 2 | Speech Recognition | [Faster-Whisper (Small)](https://github.com/SYSTRAN/faster-whisper) | Yes |
 | 3 | Machine Translation | [Helsinki EN-ZH](https://huggingface.co/Helsinki-NLP/opus-mt-en-zh) | Yes | 
-| 4 | Voice Cloning and TTS | [Coqui XTTS-V2](https://huggingface.co/coqui/XTTS-v2) | No |
+| 4 | Voice Cloning and TTS | [Coqui XTTS-V2](https://huggingface.co/coqui/XTTS-v2) | Yes |
 | 5 | Lip Sync | [Wav2Lip-GFPGAN](https://github.com/ajay-sainy/Wav2Lip-GFPGAN) | No |
 
 ---
@@ -31,9 +31,9 @@ docker build -f build/dockerfile.base -t pawlyglot/base:1.0.0 .
 ```
 
 2. Download the pretrained models
-    - Actually all of the models are hot-loaded on build/start-up. Only the ASR model ain't. I need to standardise this lol. But whateva for now. 
-    - Download the ASR model files stuff via this [link here](https://drive.google.com/file/d/1Y4WkFfLaOoFZ4G78xhWatnMzyyQy5g0J/view?usp=sharing)
-    - Extract contents into `./modules/speech_recognition/models/small`
+    - The VAD and Translation models are hot-loaded on build/start-up.
+    - Download the zipped file containing the ASR model files [here](https://drive.google.com/file/d/1Y4WkFfLaOoFZ4G78xhWatnMzyyQy5g0J/view?usp=sharing). Extract the contents into `./modules/speech_recognition/models/small`
+    - Download the zipped file containing the TTS model files [here](https://drive.google.com/file/d/1lLaFCnE3KY8RBIucWaj66h3YPrtMSdig/view?usp=sharing). Extract the content into `./modules/voice_cloning/models/xtts`
 
 3. Build the rest of the services
 ```sh
@@ -52,7 +52,8 @@ python3 -m grpc_tools.protoc -I ./proto \
     --grpc_python_out=./tests \
     ./proto/asr.proto \
     ./proto/vad.proto \
-    ./proto/mt.proto
+    ./proto/mt.proto \
+    ./proto/vc.proto
 ```
 
 ## Run
