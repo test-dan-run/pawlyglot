@@ -33,7 +33,7 @@ class MTServer(mt_pb2_grpc.TranslatorServicer):
 async def serve():
     """ Serves MT Model """
 
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=4))
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=2))
     mt_pb2_grpc.add_TranslatorServicer_to_server(MTServer(), server)
     server.add_insecure_port("[::]:50054")
     await server.start()

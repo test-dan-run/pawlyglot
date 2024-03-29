@@ -45,7 +45,7 @@ class ASRServer(asr_pb2_grpc.SpeechRecognizerServicer):
 async def serve():
     """ Serves ASR Model Asynchronously """
 
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=4))
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=2))
     asr_pb2_grpc.add_SpeechRecognizerServicer_to_server(ASRServer(), server)
     server.add_insecure_port("[::]:50053")
     await server.start()
