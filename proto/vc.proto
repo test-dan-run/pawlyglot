@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package vc;
+
+service VoiceCloner {
+    rpc embed(stream EmbedRequest) returns (EmbedResponse) {}
+    rpc synthesize(SynthRequest) returns (stream SynthResponse) {}
+    rpc delete(DeleteRequest) returns (DeleteResponse) {}
+}
+
+message EmbedRequest {
+    string buffer = 1;
+}
+
+message EmbedResponse {
+    string embed_id = 1;
+}
+
+message SynthRequest {
+    string text = 1;
+    string language = 2;
+    string embed_id = 3;
+    int32 sample_rate = 4;
+}
+
+message SynthResponse {
+    string buffer = 1;
+}
+
+message DeleteRequest {
+    string embed_id = 1;
+}
+
+message DeleteResponse {
+    string status = 1;
+}

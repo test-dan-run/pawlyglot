@@ -1,0 +1,18 @@
+# docker build -t pawlyglot/vc:1.0.0 -f build/dockerfile.vc .
+FROM pawlyglot/base:1.0.0
+
+COPY build/requirements.vc.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.vc.txt
+
+WORKDIR /vc
+
+# setup protobuf
+
+COPY modules/voice_cloning/models ./models
+COPY modules/voice_cloning/src ./src
+
+RUN mkdir ./proto
+COPY proto/vc.proto ./proto/vc.proto
+RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/vc.proto
+
+CMD ["python3", "src/serve.py"]
