@@ -58,3 +58,23 @@ services:
       memlock: -1
       stack: 67108864
     shm_size: 16gb  
+
+  vc:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/vc:1.0.0
+    build:
+      context: ../
+      dockerfile: build/dockerfile.vc
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50055:50055
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  
+    # command: ["python3", "src/serve.py"]

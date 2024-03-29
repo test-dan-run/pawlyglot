@@ -6,11 +6,10 @@ RUN python3 -m pip install --no-cache-dir -r requirements.mt.txt
 
 WORKDIR /mt
 
-# setup protobuf
+COPY modules/machine_translation/src ./src
+
 RUN mkdir ./proto
 COPY proto/mt.proto ./proto/mt.proto
-
-COPY modules/machine_translation/src ./src
 RUN python -m grpc_tools.protoc -I ./proto --python_out=./src --pyi_out=./src --grpc_python_out=./src ./proto/mt.proto
 
 CMD ["python3", "src/serve.py"]
