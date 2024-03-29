@@ -1,0 +1,11 @@
+# docker build -t pawlyglot/asr:1.1.0-dev -f dockerfile.dev.asr .
+FROM pawlyglot/base:1.0.0
+
+# set explicit directory path to libcudnn
+ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/opt/conda/lib/python3.10/site-packages/torch/lib"
+WORKDIR /asr
+
+COPY requirements.asr.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.asr.txt
+
+CMD ["sh", "-c", "python3 -m grpc_tools.protoc -I ./src --python_out=./src --pyi_out=./src --grpc_python_out=./src ./src/asr.proto && python3 src/serve.py"]

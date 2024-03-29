@@ -1,0 +1,87 @@
+version: '3.9'
+
+services:
+
+  vad:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/vad:1.0.0-dev
+    build:
+      context: ./services/voice_activity
+      dockerfile: dockerfile.dev.vad
+    volumes:
+      - ./services/voice_activity:/vad
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50052:50052
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  
+
+  asr:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/asr:1.0.0-dev
+    build:
+      context: ./services/speech_recognition
+      dockerfile: dockerfile.dev.asr
+    volumes:
+      - ./services/speech_recognition:/asr
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50053:50053
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb
+
+  mt:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/mt:1.0.0-dev
+    build:
+      context: ./services/machine_translation
+      dockerfile: dockerfile.dev.mt
+    volumes:
+      - ./services/machine_translation:/mt
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50054:50054
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  
+
+  vc:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/vc:1.0.0-dev
+    build:
+      context: ./services/voice_cloning
+      dockerfile: dockerfile.dev.vc
+    volumes:
+      - ./services/voice_cloning:/vc
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50055:50055
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  

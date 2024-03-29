@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package mt;
+
+service Translator {
+    rpc translate(TranslateRequest) returns (TranslateResponse) {}
+}
+
+message TranslateRequest {
+    string text = 1;
+}
+
+message TranslateResponse {
+    string translation = 1;
+}

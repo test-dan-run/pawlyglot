@@ -1,4 +1,4 @@
-# docker build -t pawlyglot/base:1.0.0 -f build/dockerfile.base .
+# docker build -t pawlyglot/base:1.0.0 -f dockerfile.base .
 
 ARG PYTORCH_VERSION=2.1.0
 ARG CUDA_VERSION=11.8

@@ -7,8 +7,8 @@ services:
     tty: true
     image: pawlyglot/vad:1.0.0
     build:
-      context: ../
-      dockerfile: build/dockerfile.vad
+      context: ./services/voice_activity
+      dockerfile: dockerfile.vad
     deploy:
       resources:
         reservations:
@@ -24,10 +24,10 @@ services:
   asr:
     stdin_open: true
     tty: true
-    image: pawlyglot/asr:1.1.0
+    image: pawlyglot/asr:1.0.0
     build:
-      context: ../
-      dockerfile: build/dockerfile.asr
+      context: ./services/speech_recognition
+      dockerfile: dockerfile.asr
     deploy:
       resources:
         reservations:
@@ -45,8 +45,8 @@ services:
     tty: true
     image: pawlyglot/mt:1.0.0
     build:
-      context: ../
-      dockerfile: build/dockerfile.mt
+      context: ./services/machine_translation
+      dockerfile: dockerfile.mt
     deploy:
       resources:
         reservations:
@@ -64,8 +64,8 @@ services:
     tty: true
     image: pawlyglot/vc:1.0.0
     build:
-      context: ../
-      dockerfile: build/dockerfile.vc
+      context: ./services/voice_cloning
+      dockerfile: dockerfile.vc
     deploy:
       resources:
         reservations:
@@ -76,5 +76,4 @@ services:
     ulimits:
       memlock: -1
       stack: 67108864
-    shm_size: 16gb  
-    # command: ["python3", "src/serve.py"]
+    shm_size: 16gb

@@ -27,17 +27,21 @@ Currently, the plan is to use the following projects.
 ```sh
 git clone https://github.com/test-dan-run/pawlyglot.git
 cd pawlyglot
-docker build -f build/dockerfile.base -t pawlyglot/base:1.0.0 .
+docker build -f dockerfile.base -t pawlyglot/base:1.0.0 .
 ```
 
 2. Download the pretrained models
     - The VAD and Translation models are hot-loaded on build/start-up.
-    - Download the zipped file containing the ASR model files [here](https://drive.google.com/file/d/1Y4WkFfLaOoFZ4G78xhWatnMzyyQy5g0J/view?usp=sharing). Extract the contents into `./modules/speech_recognition/models/small`
-    - Download the zipped file containing the TTS model files [here](https://drive.google.com/file/d/1lLaFCnE3KY8RBIucWaj66h3YPrtMSdig/view?usp=sharing). Extract the content into `./modules/voice_cloning/models/xtts`
+    - Download the zipped file containing the ASR model files [here](https://drive.google.com/file/d/1Y4WkFfLaOoFZ4G78xhWatnMzyyQy5g0J/view?usp=sharing). Extract the contents into `./services/speech_recognition/models/small`
+    - Download the zipped file containing the TTS model files [here](https://drive.google.com/file/d/1lLaFCnE3KY8RBIucWaj66h3YPrtMSdig/view?usp=sharing). Extract the content into `./services/voice_cloning/models/xtts`
 
 3. Build the rest of the services
+
 ```sh
-cd build
+# for development, mount models and source code
+docker-compose -f docker-compose.dev.yaml build
+
+# for staging/deployment
 docker-compose build
 ```
 
@@ -59,7 +63,10 @@ python3 -m grpc_tools.protoc -I ./proto \
 ## Run
 1. Start up the services.
 ```sh
-cd build
+# for development, mount models and source code
+docker-compose -f docker-compose.dev.yaml up
+
+# for staging/deployment
 docker-compose up
 ```
 
