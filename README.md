@@ -51,9 +51,9 @@ python3 -m pip install grpcio-tools==1.62.1
 
 # be in the main directory
 python3 -m grpc_tools.protoc -I ./proto \
-    --python_out=./tests \
-    --pyi_out=./tests \
-    --grpc_python_out=./tests \
+    --python_out=./orchestrator \
+    --pyi_out=./orchestrator \
+    --grpc_python_out=./orchestrator \
     ./proto/asr.proto \
     ./proto/vad.proto \
     ./proto/mt.proto \
@@ -70,10 +70,10 @@ docker-compose -f docker-compose.dev.yaml up
 docker-compose up
 ```
 
-2. Run test client.
+2. Test out the orchestrator.
 
 ```sh
 cd ./tests
-# edit SAMPLE_AUDIO_PATH (Line 26) to whatever you want. Audio file is assumed to be sampled at 16KHz.
-python3 test_client.py
+# edit input_audio_filepath (Line 151) to whatever you want. Audio file is assumed to be sampled at 16KHz.
+python3 orchestrate.py
 ```
