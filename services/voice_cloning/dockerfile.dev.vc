@@ -1,0 +1,9 @@
+# docker build -t pawlyglot/vc:1.0.0-dev -f dockerfile.vc .
+FROM pawlyglot/base:1.0.0
+
+WORKDIR /vc
+
+COPY requirements.vc.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.vc.txt
+
+CMD ["sh", "-c", "python3 -m grpc_tools.protoc -I ./src --python_out=./src --pyi_out=./src --grpc_python_out=./src ./src/vc.proto && python3 src/serve.py"]

@@ -1,9 +1,0 @@
-# base packages
-pip==24.0
-setuptools==69.1.0
-wheel==0.42.0
-Cython==3.0.8
-
-# grpc tools
-grpcio==1.62.1
-grpcio-tools==1.62.1
