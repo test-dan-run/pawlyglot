@@ -84,13 +84,20 @@ async def run_pipeline(
     # send audio file to vad service
     # TODO: have vad service take in numpy array instead
     # this is to prevent double loading of the same audio
-    timestamps = vad.vad_call(input_audio_filepath, HOST, VAD_PORT)
+    speech_timestamps = vad.vad_call(input_audio_filepath, HOST, VAD_PORT)
+    silence_timestamps = [
+        (
+            speech_timestamps[i].end, 
+            speech_timestamps[i+1].start,
+        ) for i in range(len(speech_timestamps)-1)
+    ]
 
     # send numpy array to vc embedding service
     # vc service will store the embeddings after processing
     audio_arr, _ = librosa.load(input_audio_filepath, sr=SAMPLE_RATE, mono=True)
-    audio_segments = [audio_arr[int(SAMPLE_RATE*ts.start):int(SAMPLE_RATE*ts.end)] for ts in timestamps]
+    audio_segments = [audio_arr[int(SAMPLE_RATE*ts.start):int(SAMPLE_RATE*ts.end)] for ts in speech_timestamps]
     concat_audio = np.concatenate(audio_segments)
+    silence_segments = [audio_arr[int(SAMPLE_RATE*ts[0]):int(SAMPLE_RATE*ts[1])] for ts in silence_timestamps]
 
     embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, HOST, VC_PORT)
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
@@ -104,7 +111,7 @@ async def run_pipeline(
         results[number] = output
     
     # set up calls for each audio segment, and execute the calls
-    for idx, ts in enumerate(timestamps):
+    for idx, ts in enumerate(speech_timestamps):
         start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
         segment = audio_arr[start:end]
 
@@ -117,23 +124,31 @@ async def run_pipeline(
     await asyncio.gather(*tasks, return_exceptions=True)
 
     # delete the embeddings to release vram
-    _ = vc.delete_call(embed_id)
+    vc.delete_call(embed_id)
 
-    # generate synthesised audio and textual outputs
-    audio_arrays = [results[i].pop("audio") for i in range(len(results))]
+    # re-sort responses in chronological order
+    results = {
+        k: v for k, v in sorted(
+            results.items(), key=lambda item: item[0]
+        )}
+
+    # generate synthesised audio
+    # concatenate synthesised audio with original silence segments
+    audio_arrays = []
+    for i in range(len(results)):
+        audio_arrays.append(results[i].pop("audio"))
+        if i == len(results)-1: break
+        audio_arrays.append(silence_segments[i])
     output_array = np.concatenate(audio_arrays)
     sf.write(output_audio_filepath, output_array, SAMPLE_RATE)
 
+    # generate text outputs in a JSON file
     with open(output_json_filepath, mode="w") as fw:
-        results = {
-            k: v for k, v in sorted(
-                results.items(), key=lambda item: item[0]
-            )}
         json.dump(results, fw, indent=2)
 
 if __name__ == "__main__":
     
-    input_audio_filepath = "../examples/test_audio.wav"
+    input_audio_filepath = "../examples/tom_scott_dubbing_16k.wav"
     output_audio_filepath = "../examples/output.wav"
     output_json_filepath = "../examples/output.json"
 
