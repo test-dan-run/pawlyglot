@@ -2,9 +2,9 @@
 
 # generate protobufs
 python3 -m grpc_tools.protoc -I ./proto \
-    --python_out=./orchestrator \
-    --pyi_out=./orchestrator \
-    --grpc_python_out=./orchestrator \
+    --python_out=./backend \
+    --pyi_out=./backend \
+    --grpc_python_out=./backend \
     ./proto/asr.proto \
     ./proto/vad.proto \
     ./proto/vc.proto \
