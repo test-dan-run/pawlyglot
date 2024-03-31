@@ -111,6 +111,8 @@ def run_pipeline(audio_filepath: str):
     embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, HOST, VC_PORT)
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
 
+    text_concat = ""
+
     # set up calls for each audio segment, and execute the calls
     for idx, ts in enumerate(speech_timestamps):
         if idx == len(speech_timestamps):
@@ -127,7 +129,9 @@ def run_pipeline(audio_filepath: str):
         output_array = output_array / np.abs(output_array).max()
         output_array = (output_array * 32767).astype(np.int16)
 
-        yield (SAMPLE_RATE, output_array)
+        text_concat += f"""[{round(ts.start,2)}:{round(ts.end,2)}]\nTRANSCRIPT: {result["transcription"]}\nTRANSLATE : {result["translation"]}\n-----------\n"""
+
+        yield [(SAMPLE_RATE, output_array), text_concat]
 
     # delete the embeddings to release vram
     vc.delete_call(embed_id)
