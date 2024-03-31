@@ -100,35 +100,38 @@ def run_pipeline(audio_filepath: str):
 
     # send numpy array to vc embedding service
     # vc service will store the embeddings after processing
-    audio_segments = [audio_arr[int(SAMPLE_RATE*ts.start):int(SAMPLE_RATE*ts.end)] for ts in speech_timestamps]
+    audio_segments = [
+        audio_arr[int(SAMPLE_RATE*ts.start):int(SAMPLE_RATE*ts.end)] for ts in speech_timestamps
+        ]
     concat_audio = np.concatenate(audio_segments)
-    silence_segments = [audio_arr[int(SAMPLE_RATE*ts[0]):int(SAMPLE_RATE*ts[1])] for ts in silence_timestamps]
+    silence_segments = [
+        audio_arr[int(SAMPLE_RATE*ts[0]):int(SAMPLE_RATE*ts[1])] for ts in silence_timestamps
+        ]
 
     embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, HOST, VC_PORT)
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
 
     # set up calls for each audio segment, and execute the calls
     for idx, ts in enumerate(speech_timestamps):
-        if idx == len(speech_timestamps)-1:
+        if idx == len(speech_timestamps):
             break
         start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end)
         segment = audio_arr[start:end]
         result = combined_call(segment, LANGUAGE, ts.start, ts.end, embed_id, SAMPLE_RATE)
-        output_array = np.concatenate([result["audio"], silence_segments[idx]])
+
+        if idx != len(speech_timestamps)-1:
+            output_array = np.concatenate([result["audio"], silence_segments[idx]])
+        else:
+            output_array = result["audio"]
+
         output_array = output_array / np.abs(output_array).max()
         output_array = (output_array * 32767).astype(np.int16)
-        yield (SAMPLE_RATE, output_array)
 
-    ts_final = speech_timestamps[-1]
-    start, end = int(SAMPLE_RATE * ts_final.start), int(SAMPLE_RATE * ts_final.end)
-    segment = audio_arr[start:end]
-    result = combined_call(segment, LANGUAGE, ts_final.start, ts_final.end, embed_id, SAMPLE_RATE)
-    output_array = result["audio"] / np.abs(result["audio"]).max()
-    output_array = (output_array * 32767).astype(np.int16)
+        yield (SAMPLE_RATE, output_array)
 
     # delete the embeddings to release vram
     vc.delete_call(embed_id)
-    yield (SAMPLE_RATE, output_array)
+    logging.info(f"Audio embedding successfully deleted. ID: {embed_id}")
 
 if __name__ == "__main__":
     pass
