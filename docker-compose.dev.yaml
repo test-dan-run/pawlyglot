@@ -85,3 +85,17 @@ services:
       memlock: -1
       stack: 67108864
     shm_size: 16gb  
+  
+  backend:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/backend:1.0.0-dev
+    build:
+      context: ./backend
+      dockerfile: dockerfile.dev.backend
+    volumes:
+      - ./backend:/backend
+      - ./examples:/examples
+    ports:
+      - 7860:7860
+    command: ["python3", "serve.py"]

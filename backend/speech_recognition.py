@@ -4,7 +4,7 @@ import grpc
 import numpy as np
 import asr_pb2, asr_pb2_grpc
 
-__all__ = ["asr_call"]
+__all__ = ["asr_call", "asr_async_call"]
 
 CHUNK_SIZE = 1024 * 1024
 
@@ -21,7 +21,23 @@ def get_encoded_chunks(encoded: str):
         idx += 1
         yield asr_pb2.RecognizeRequest(buffer=piece)
 
-async def asr_call(
+def asr_call(
+        array: np.ndarray,
+        host: str = "localhost",
+        port: int = 50053
+    ) -> ASROutput:
+
+    b64encoded = base64.b64encode(array)
+    chunks_generator = get_encoded_chunks(b64encoded)
+
+    with grpc.insecure_channel(f"{host}:{port}") as channel:
+        stub = asr_pb2_grpc.SpeechRecognizerStub(channel)
+
+        response = stub.recognize(chunks_generator)
+
+    return {"text": response.transcription}
+
+async def asr_async_call(
         number: int, 
         array: np.ndarray,
         host: str = "localhost",
