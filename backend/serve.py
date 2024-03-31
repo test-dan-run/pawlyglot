@@ -2,6 +2,7 @@ import gradio as gr
 from orchestrator_stream import run_pipeline
 
 with gr.Blocks() as demo:
+    
     gr.HTML(value="<h1 style='color: orange'>Pawlyglot</h1>")
     gr.Markdown(
     """
@@ -18,10 +19,13 @@ with gr.Blocks() as demo:
                 )
     with gr.Row():
         with gr.Column():
-            inp = gr.Audio(type="filepath")
+            inp_audio = gr.Audio(type="filepath")
             btn = gr.Button("Run")
-        out = gr.Audio(streaming=True, autoplay=True)
+            gr.Examples("/examples", inp_audio)
+        with gr.Column():
+            out_audio = gr.Audio(label="Text-to-Speech", streaming=True, autoplay=True)
+            out_text = gr.Textbox(label="Transcriptions and Translations", lines=7)
 
-    btn.click(fn=run_pipeline, inputs=inp, outputs=out)
+    btn.click(fn=run_pipeline, inputs=inp_audio, outputs=[out_audio, out_text])
 
-demo.queue().launch()
+demo.queue().launch(server_name="0.0.0.0", server_port=7860, share=True, auth=("nlp", "cuteboi"))

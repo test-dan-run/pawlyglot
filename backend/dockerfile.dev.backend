@@ -1,0 +1,15 @@
+# docker build -t pawlyglot/backend:1.0.0-dev -f dockerfile.dev.backend .
+FROM pawlyglot/base:1.0.0
+
+WORKDIR /backend
+
+COPY requirements.backend.txt .
+RUN python3 -m pip install --no-cache-dir -r requirements.backend.txt
+
+CMD ["sh", "-c", "python3 -m grpc_tools.protoc -I ./src \
+     --python_out=./src --pyi_out=./src --grpc_python_out=./src \
+     ./src/vad.proto \
+     ./src/asr.proto \
+     ./src/mt.proto \
+     ./src/vc.proto \     
+     && python3 src/serve.py"]

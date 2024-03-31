@@ -32,7 +32,11 @@ os.makedirs(TMP_DIR, exist_ok=True)
 SAMPLE_RATE: int = 16000
 LANGUAGE: str = "zh-cn"
 
-HOST: str = "localhost"
+VAD_HOST: str = "vad"
+ASR_HOST: str = "asr"
+MT_HOST: str = "mt"
+VC_HOST: str = "vc"
+
 VAD_PORT: int = 50052
 ASR_PORT: int = 50053
 MT_PORT: int = 50054
@@ -63,13 +67,13 @@ def combined_call(
     ) -> PawlyglotOutput:
 
     asr_response = asr.asr_call(
-        array, HOST, ASR_PORT
+        array, ASR_HOST, ASR_PORT
     )
     mt_response = mt.mt_call(
-        asr_response["text"], HOST, MT_PORT
+        asr_response["text"], MT_HOST, MT_PORT
     )
     vc_response = vc.synthesize_call(
-        mt_response["text"], embed_id, target_language, sample_rate, HOST, VC_PORT
+        mt_response["text"], embed_id, target_language, sample_rate, VC_HOST, VC_PORT
     )
 
     return {
@@ -90,7 +94,7 @@ def run_pipeline(audio_filepath: str):
     # send audio file to vad service
     # TODO: have vad service take in numpy array instead
     # this is to prevent double loading of the same audio
-    speech_timestamps = vad.vad_call(tmp_audio_filepath, HOST, VAD_PORT)
+    speech_timestamps = vad.vad_call(tmp_audio_filepath, VAD_HOST, VAD_PORT)
     silence_timestamps = [
         (
             speech_timestamps[i].end, 
@@ -108,7 +112,7 @@ def run_pipeline(audio_filepath: str):
         audio_arr[int(SAMPLE_RATE*ts[0]):int(SAMPLE_RATE*ts[1])] for ts in silence_timestamps
         ]
 
-    embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, HOST, VC_PORT)
+    embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, VC_HOST, VC_PORT)
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
 
     text_concat = ""
@@ -134,7 +138,7 @@ def run_pipeline(audio_filepath: str):
         yield [(SAMPLE_RATE, output_array), text_concat]
 
     # delete the embeddings to release vram
-    vc.delete_call(embed_id)
+    vc.delete_call(embed_id, VC_HOST, VC_PORT)
     logging.info(f"Audio embedding successfully deleted. ID: {embed_id}")
 
 if __name__ == "__main__":
