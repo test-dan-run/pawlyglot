@@ -12,13 +12,12 @@ python3 -m grpc_tools.protoc -I ./proto \
 
 """
 
-import time
-import json
+import os
 import logging
 import librosa
 import numpy as np
 import soundfile as sf
-from typing import TypedDict, Tuple, Dict
+from typing import TypedDict
 
 import machine_translation as mt
 import speech_recognition as asr
@@ -26,6 +25,9 @@ import voice_activity as vad
 import voice_cloning as vc
 
 logging.basicConfig(level=logging.INFO)
+
+TMP_DIR = "/tmp/pawlyglot/input_audio"
+os.makedirs(TMP_DIR, exist_ok=True)
 
 SAMPLE_RATE: int = 16000
 LANGUAGE: str = "zh-cn"
@@ -78,12 +80,17 @@ def combined_call(
         "audio": vc_response["array"],
     }
 
-def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglotOutput]]:
+def run_pipeline(audio_filepath: str):
+
+    # load and convert audio into standardized sample rate
+    audio_arr, _ = librosa.load(audio_filepath, sr=SAMPLE_RATE, mono=True)
+    tmp_audio_filepath = os.path.join(TMP_DIR, os.path.basename(audio_filepath))
+    sf.write(tmp_audio_filepath, audio_arr, SAMPLE_RATE)
 
     # send audio file to vad service
     # TODO: have vad service take in numpy array instead
     # this is to prevent double loading of the same audio
-    speech_timestamps = vad.vad_call(audio_filepath, HOST, VAD_PORT)
+    speech_timestamps = vad.vad_call(tmp_audio_filepath, HOST, VAD_PORT)
     silence_timestamps = [
         (
             speech_timestamps[i].end, 
@@ -93,7 +100,6 @@ def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglo
 
     # send numpy array to vc embedding service
     # vc service will store the embeddings after processing
-    audio_arr, _ = librosa.load(audio_filepath, sr=SAMPLE_RATE, mono=True)
     audio_segments = [audio_arr[int(SAMPLE_RATE*ts.start):int(SAMPLE_RATE*ts.end)] for ts in speech_timestamps]
     concat_audio = np.concatenate(audio_segments)
     silence_segments = [audio_arr[int(SAMPLE_RATE*ts[0]):int(SAMPLE_RATE*ts[1])] for ts in silence_timestamps]
@@ -102,56 +108,27 @@ def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglo
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
 
     # set up calls for each audio segment, and execute the calls
-    results = {}
     for idx, ts in enumerate(speech_timestamps):
+        if idx == len(speech_timestamps)-1:
+            break
         start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end)
         segment = audio_arr[start:end]
-        results[idx] = combined_call(segment, LANGUAGE, ts.start, ts.end, embed_id, SAMPLE_RATE)
+        result = combined_call(segment, LANGUAGE, ts.start, ts.end, embed_id, SAMPLE_RATE)
+        output_array = np.concatenate([result["audio"], silence_segments[idx]])
+        output_array = output_array / np.abs(output_array).max()
+        output_array = (output_array * 32767).astype(np.int16)
+        yield (SAMPLE_RATE, output_array)
+
+    ts_final = speech_timestamps[-1]
+    start, end = int(SAMPLE_RATE * ts_final.start), int(SAMPLE_RATE * ts_final.end)
+    segment = audio_arr[start:end]
+    result = combined_call(segment, LANGUAGE, ts_final.start, ts_final.end, embed_id, SAMPLE_RATE)
+    output_array = result["audio"] / np.abs(result["audio"]).max()
+    output_array = (output_array * 32767).astype(np.int16)
 
     # delete the embeddings to release vram
     vc.delete_call(embed_id)
-
-    # generate synthesised audio
-    # concatenate synthesised audio with original silence segments
-    audio_arrays = []
-    for idx, result in results.items():
-        audio_arrays.append(result.pop("audio"))
-        if idx == len(results)-1:
-            break
-        audio_arrays.append(silence_segments[idx])
-    output_array = np.concatenate(audio_arrays)
-
-    return (output_array, results)
-
-def run_pipeline_with_write(
-        input_audio_filepath: str,
-        output_audio_filepath: str, 
-        output_json_filepath: str,
-    ) -> None:
-
-    output_array, results = run_pipeline(input_audio_filepath)
-    sf.write(output_audio_filepath, output_array, SAMPLE_RATE)
-
-    # generate text outputs in a JSON file
-    with open(output_json_filepath, mode="w", encoding="utf-8") as fw:
-        json.dump(results, fw, indent=2)
+    yield (SAMPLE_RATE, output_array)
 
 if __name__ == "__main__":
-
-    INPUT_AUDIO_FILEPATH = "../examples/tom_scott_dubbing_16k.wav"
-    OUTPUT_AUDIO_FILEPATH = "../examples/output.wav"
-    OUTPUT_JSON_FILEPATH = "../examples/output.json"
-
-    total_duration = librosa.get_duration(filename=INPUT_AUDIO_FILEPATH)
-
-    perf_start = time.perf_counter()
-    run_pipeline_with_write(
-        INPUT_AUDIO_FILEPATH,
-        OUTPUT_AUDIO_FILEPATH,
-        OUTPUT_JSON_FILEPATH,
-    )
-    perf_end = time.perf_counter()
-    process_time = perf_end-perf_start
-    logging.info(f"Audio Duration  : {round(total_duration, 3)}")
-    logging.info(f"Processing Time : {round(process_time, 3)}")
-    logging.info(f"Real-time Factor: {round(process_time/total_duration, 3)}")
+    pass

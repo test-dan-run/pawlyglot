@@ -14,6 +14,7 @@ python3 -m grpc_tools.protoc -I ./proto \
 
 import time
 import json
+import asyncio
 import logging
 import librosa
 import numpy as np
@@ -51,7 +52,8 @@ class MinPawlyglotOutput(TypedDict):
     translation: str
 
 # strings up asr, mt, and voice cloning calls
-def combined_call(
+async def distributed_call(
+        number: int,
         array: np.ndarray,
         target_language: str,
         start_time: float,
@@ -60,17 +62,18 @@ def combined_call(
         sample_rate: int
     ) -> PawlyglotOutput:
 
-    asr_response = asr.asr_call(
-        array, HOST, ASR_PORT
+    asr_response = await asr.asr_async_call(
+        number, array, HOST, ASR_PORT
     )
-    mt_response = mt.mt_call(
-        asr_response["text"], HOST, MT_PORT
+    mt_response = await mt.mt_async_call(
+        number, asr_response["text"], HOST, MT_PORT
     )
     vc_response = vc.synthesize_call(
         mt_response["text"], embed_id, target_language, sample_rate, HOST, VC_PORT
     )
 
     return {
+        "number": number,
         "start_time": start_time,
         "end_time": end_time,
         "transcription": asr_response["text"],
@@ -78,7 +81,7 @@ def combined_call(
         "audio": vc_response["array"],
     }
 
-def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglotOutput]]:
+async def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglotOutput]]:
 
     # send audio file to vad service
     # TODO: have vad service take in numpy array instead
@@ -100,30 +103,49 @@ def run_pipeline(audio_filepath: str) -> Tuple[np.ndarray, Dict[int, MinPawlyglo
 
     embed_id = vc.embed_call(concat_audio, SAMPLE_RATE, HOST, VC_PORT)
     logging.info(f"Audio successfully embedded. ID: {embed_id}")
-
-    # set up calls for each audio segment, and execute the calls
+    
+    # callback to gather results of each asynchronous task
+    tasks = []
     results = {}
+    def process_distributed_results(output: PawlyglotOutput) -> None:
+        number = output.pop("number")
+        logging.info(f"Received response {number}, content: {output}")
+        results[number] = output
+    
+    # set up calls for each audio segment, and execute the calls
     for idx, ts in enumerate(speech_timestamps):
-        start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end)
+        start, end = int(SAMPLE_RATE * ts.start), int(SAMPLE_RATE * ts.end) 
         segment = audio_arr[start:end]
-        results[idx] = combined_call(segment, LANGUAGE, ts.start, ts.end, embed_id, SAMPLE_RATE)
+
+        task = asyncio.create_task(
+            distributed_call(idx, segment, LANGUAGE, ts.start, ts.end, embed_id, SAMPLE_RATE)
+        )
+        task.add_done_callback(lambda t: process_distributed_results(t.result()))
+        tasks.append(task)
+
+    await asyncio.gather(*tasks, return_exceptions=True)
 
     # delete the embeddings to release vram
     vc.delete_call(embed_id)
 
+    # re-sort responses in chronological order
+    results = {
+        k: v for k, v in sorted(
+            results.items(), key=lambda item: item[0]
+        )}
+
     # generate synthesised audio
     # concatenate synthesised audio with original silence segments
     audio_arrays = []
-    for idx, result in results.items():
-        audio_arrays.append(result.pop("audio"))
-        if idx == len(results)-1:
-            break
-        audio_arrays.append(silence_segments[idx])
+    for i in range(len(results)):
+        audio_arrays.append(results[i].pop("audio"))
+        if i == len(results)-1: break
+        audio_arrays.append(silence_segments[i])
     output_array = np.concatenate(audio_arrays)
 
     return (output_array, results)
 
-def run_pipeline_with_write(
+async def run_pipeline_with_write(
         input_audio_filepath: str,
         output_audio_filepath: str, 
         output_json_filepath: str,
@@ -137,7 +159,7 @@ def run_pipeline_with_write(
         json.dump(results, fw, indent=2)
 
 if __name__ == "__main__":
-
+    
     INPUT_AUDIO_FILEPATH = "../examples/tom_scott_dubbing_16k.wav"
     OUTPUT_AUDIO_FILEPATH = "../examples/output.wav"
     OUTPUT_JSON_FILEPATH = "../examples/output.json"
@@ -145,11 +167,11 @@ if __name__ == "__main__":
     total_duration = librosa.get_duration(filename=INPUT_AUDIO_FILEPATH)
 
     perf_start = time.perf_counter()
-    run_pipeline_with_write(
+    asyncio.run(run_pipeline_with_write(
         INPUT_AUDIO_FILEPATH,
         OUTPUT_AUDIO_FILEPATH,
         OUTPUT_JSON_FILEPATH,
-    )
+    ))
     perf_end = time.perf_counter()
     process_time = perf_end-perf_start
     logging.info(f"Audio Duration  : {round(total_duration, 3)}")
