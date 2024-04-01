@@ -1,24 +1,34 @@
 import gradio as gr
-from orchestrator_stream import run_pipeline
+from orchestrator_stream import run_pipeline, extract_from_youtube_url
 
 with gr.Blocks() as demo:
     
-    gr.HTML(value="<h1 style='color: orange'>Pawlyglot</h1>")
+    gr.HTML(value="<h1 style='color: orange'>Pawlyglot (Beta)</h1>")
     gr.Markdown(
     """
     **pawlyglot** is a project that aims to develop an end-to-end multilingual TTS, voice-cloning and lip-syncing pipeline, by combining several open-source projects.<br>
     Visit the development git repository to see the behind-the-scenes [here](https://github.com/test-dan-run/pawlyglot).
 
-    Notes:<br>
+    **Notes:**<br>
     Only **EN > CN** translations will be supported at the moment.<br>
     Current pipeline only contains: **VAD -> ASR -> MT -> VC/TTS** (Lip-syncing will be available in future versions)<br>
     You will only need to wait for the first VAD segment of audio to be synthesized before a response returns. The rest of the segments will come streaming in after. <br>
-
-    Current Average RTF: 0.6
+    
+    **CAVEAT:**<br>
+    Pipeline will assume there's only 1 speaker throughout the entire clip. <br>
+    If there's 2 speakers or more, the pipeline combines the characteristics of the multiple speakers to generate a brand new voice.
+    
+    **Step 1 and only Step 1**<br>
+    Put in an English audio clip which you wish to translate into Mandarin speech! And then wait!<br>
+    Average Wait time: 6~10s for first output chunk<br>
+    There might be multiple people trying the pipeline out. Using Gradio's default queueing system to queue requests. Be patient ya!
     """
                 )
     with gr.Row():
         with gr.Column():
+            with gr.Row():
+                inp_youtube_url = gr.Textbox(label="Youtube URL", interactive=True, scale=3)
+                youtube_btn = gr.Button("Download", scale=1)
             inp_audio = gr.Audio(type="filepath")
             btn = gr.Button("Run")
             gr.Examples("/examples", inp_audio)
@@ -26,6 +36,7 @@ with gr.Blocks() as demo:
             out_audio = gr.Audio(label="Text-to-Speech", streaming=True, autoplay=True)
             out_text = gr.Textbox(label="Transcriptions and Translations", lines=7)
 
+    youtube_btn.click(fn=extract_from_youtube_url, inputs=inp_youtube_url, outputs=inp_audio)
     btn.click(fn=run_pipeline, inputs=inp_audio, outputs=[out_audio, out_text])
 
 demo.queue().launch(server_name="0.0.0.0", server_port=7860, share=True, auth=("nlp", "cuteboi"))

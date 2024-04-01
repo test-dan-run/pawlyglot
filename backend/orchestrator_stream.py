@@ -15,8 +15,10 @@ python3 -m grpc_tools.protoc -I ./proto \
 import os
 import logging
 import librosa
+import subprocess
 import numpy as np
 import soundfile as sf
+from uuid import uuid4
 from typing import TypedDict
 
 import machine_translation as mt
@@ -88,7 +90,7 @@ def run_pipeline(audio_filepath: str):
 
     # load and convert audio into standardized sample rate
     audio_arr, _ = librosa.load(audio_filepath, sr=SAMPLE_RATE, mono=True)
-    tmp_audio_filepath = os.path.join(TMP_DIR, os.path.basename(audio_filepath))
+    tmp_audio_filepath = os.path.join(TMP_DIR, "standardized_" + os.path.basename(audio_filepath))
     sf.write(tmp_audio_filepath, audio_arr, SAMPLE_RATE)
 
     # send audio file to vad service
@@ -140,6 +142,12 @@ def run_pipeline(audio_filepath: str):
     # delete the embeddings to release vram
     vc.delete_call(embed_id, VC_HOST, VC_PORT)
     logging.info(f"Audio embedding successfully deleted. ID: {embed_id}")
+
+def extract_from_youtube_url(youtube_url: str) -> str:
+    logging.info(f"Youtube URL downloaded: {youtube_url}")
+    output_path = os.path.join(TMP_DIR, str(uuid4())+".wav")
+    subprocess.run(["yt-dlp", youtube_url, "--extract-audio", "--audio-format", "wav", "-o", output_path])
+    return output_path
 
 if __name__ == "__main__":
     pass
