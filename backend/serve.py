@@ -18,9 +18,12 @@ with gr.Blocks() as demo:
     Pipeline will assume there's only 1 speaker throughout the entire clip. <br>
     If there's 2 speakers or more, the pipeline combines the characteristics of the multiple speakers to generate a brand new voice.
     
-    **Step 1 and only Step 1**<br>
-    Put in an English audio clip which you wish to translate into Mandarin speech! And then wait!<br>
-    Average Wait time: 6~10s for first output chunk<br>
+    **Steps**<br>
+    Step 1<br>
+    (Option 1) Copy a Youtube Video URL and click download. This will populate the audio input below.<br>
+    (Option 2) Put in an English audio clip from your own file directory.<br>
+    Step 2<br>
+    Wait! Average Wait time: 6~10s for first output chunk<br>
     There might be multiple people trying the pipeline out. Using Gradio's default queueing system to queue requests. Be patient ya!
     """
                 )
