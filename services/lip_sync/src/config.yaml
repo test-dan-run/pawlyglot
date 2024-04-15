@@ -1,0 +1,19 @@
+device: cuda
+image_resize_factor: 2
+
+face:
+  keep_all: false
+  selection_method: largest
+  batch_size: 32
+  face_resize: 96
+  pads:
+    y1: 0
+    y2: 10
+    x1: 0
+    x2: 0
+
+wav2lip: 
+  model_path: /lipsync/models/wav2lip_gan.onnx
+  sample_rate: 16000
+  mel_step_size: 16
+  batch_size: 32
