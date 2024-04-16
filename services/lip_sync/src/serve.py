@@ -5,6 +5,10 @@ from typing import List, Tuple
 import logging
 from uuid import uuid4
 from datetime import datetime
+import asyncio
+from concurrent import futures
+import base64
+import grpc
 logging.basicConfig(level=logging.INFO)
 
 import cv2
@@ -21,12 +25,25 @@ import ls_pb2_grpc
 from wav2lip.audio import melspectrogram
 from wav2lip.wav2lip_onnx import Wav2LipOnnx
 
+CHUNK_SIZE = 1024 * 1024
+
 def save_chunks_to_file(chunks, filename):
     """writer incoming buffer chunks into file"""
 
     with open(filename, "wb") as f:
         for chunk in chunks:
             f.write(chunk.buffer)
+
+def get_encoded_chunks(encoded: str):
+
+    idx = 0
+
+    while True:
+        piece = encoded[idx*CHUNK_SIZE:(idx+1)*CHUNK_SIZE]
+        if len(piece) == 0:
+            return
+        idx += 1
+        yield ls_pb2.LipSyncResponse(buffer=piece)
 
 class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
     def __init__(self, config_path: str):
@@ -54,10 +71,6 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
         self.wav2lip_batch_size = cfg["wav2lip"]["batch_size"]
 
         self.video_frames = {}
-
-    def _generate_id(self):
-        # e.g. '201902-0309-0347-3de72c98-4004-45ab-980f-658ab800ec5d'
-        return datetime.now().strftime('%Y%m-%d%H-%M%S-') + str(uuid4())
 
     def load_video(self, video_filepath: str) -> Tuple[List[np.ndarray], int]:
 
@@ -213,33 +226,51 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
         command = f'ffmpeg -y -i {audio_path} -i /lipsync/temp/temp.avi -strict -2 -q:v 1 {output_path}'
         subprocess.call(command, shell=True)
 
-    def facedetect(self, request_iterator, context):
+    def videotransfer(self, request_iterator, context):
 
         metadata = context.invocation_metadata()
 
-        fps = None
+        fps, embed_id = None, None
         for key, value in metadata:
-            if key != "fps":
-                continue
-            fps = value
+            if key == "fps":
+                fps = int(value)
+            elif key == "embed_id":
+                embed_id = value
         assert isinstance(fps, int), "fps metadata not found in request."
+        assert isinstance(embed_id, str), "embed_id metadata not found in request."
 
-        embed_id = self._generate_id()
+        total_buffer = b""
 
-        video_frames = []
         for req in request_iterator:
-            frame = req.image
-            if self.image_resize_factor > 1:
-                frame = cv2.resize(frame,
-                                   (frame.shape[1]//self.image_resize_factor,
-                                    frame.shape[0]//self.image_resize_factor))
+            total_buffer += req.image_buffer
 
-            video_frames.append(frame)
-        self.store_video_frames(video_frames, fps, embed_id)
-        face_frames, face_bboxes = self.generate_all_face_bboxes(video_frames)
+        image_buffer = np.frombuffer(req.image_buffer, dtype=np.uint8)
+        frame = cv2.imdecode(image_buffer, cv2.IMREAD_COLOR)
+
+        if self.image_resize_factor > 1:
+            frame = cv2.resize(frame,
+                                (frame.shape[1]//self.image_resize_factor,
+                                frame.shape[0]//self.image_resize_factor))
+
+        if not self.video_frames.get(embed_id):
+            self.video_frames[embed_id] = {
+                "frames": [],
+                "fps": fps,
+                "height": frame.shape[0],
+                "width": frame.shape[1]
+            }
+        self.video_frames[embed_id]["frames"].append(frame)
+
+
+        return ls_pb2.VideoTransferResponse(reply=1)
+
+    def facedetect(self, embed_id, context):
+
+        face_frames, face_bboxes = self.generate_all_face_bboxes(self.video_frames[embed_id]["frames"])
         self.store_all_bboxes(embed_id, face_frames, face_bboxes)
 
-        return embed_id
+        return ls_pb2.FaceDetectResponse(reply=1)
+
 
     def lipsync(self, request_iterator, context):
 
@@ -294,48 +325,25 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
                 output_frames[0].shape[0],
                 embed_id+".mp4"
             )
-
         
+        out = cv2.imread(embed_id+".mp4")
+        _, buffer = cv2.imencode(".jpg", out)
+        out_base64 = base64.b64encode(buffer).decode("utf-8")
+
+        chunks_generator = get_encoded_chunks(out_base64)
+        return chunks_generator
+
+async def serve():
+    """ Serves TTS Model """
+
+    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=1))
+    ls_pb2_grpc.add_VoiceClonerServicer_to_server(LipSyncerServer("./config.yaml"), server)
+    server.add_insecure_port("[::]:50055")
+    await server.start()
+
+    print("Server started, listening on port 50055")
+    await server.wait_for_termination()
 
 if __name__ == "__main__":
-
-    VIDEO_FILEPATH = ""
-    AUDIO_FILEPATH = ""
-    OUT_FILEPATH = ""
-
-    lipsyncer = LipSyncer("config.yaml")
-    import time
-
-    vid_start = time.perf_counter()
-    video_frames, fps = lipsyncer.load_video(VIDEO_FILEPATH)
-    face_frames, face_coords = lipsyncer.generate_all_face_bboxes(video_frames)
-    vid_end = time.perf_counter()
-
-    aud_start = time.perf_counter()
-    wav = lipsyncer.load_audio(AUDIO_FILEPATH)
-    mel_chunks = lipsyncer.generate_all_mel_chunks(wav, fps)
-    output_frames = lipsyncer.generate_all_outputs(video_frames, face_frames, face_coords, mel_chunks)
-    aud_end = time.perf_counter()
-
-    lipsyncer.write_out(
-        output_frames,
-        AUDIO_FILEPATH,
-        fps,
-        output_frames[0].shape[1],
-        output_frames[0].shape[0],
-        OUT_FILEPATH
-    )
-
-
-    vid_proc_time = round(vid_end-vid_start, 3)
-    aud_proc_time = round(aud_end-aud_start, 3)
-    proc_time = round(vid_proc_time+aud_proc_time, 3)
-    audio_duration = librosa.get_duration(filename=AUDIO_FILEPATH)
-    logging.info("Audio Length   : %s", audio_duration)
-    logging.info("Face Detector Proc Time: %s", vid_proc_time)
-    logging.info("Face Detector RTF      : %s", round(vid_proc_time/audio_duration, 3))    
-    logging.info("Wav2Lip Proc Time: %s", aud_proc_time)
-    logging.info("Wav2Lip RTF      : %s", round(aud_proc_time/audio_duration, 3))
-
-    logging.info("Total Proc Time: %s", proc_time)
-    logging.info("Total RTF      : %s", round(proc_time/audio_duration, 3))
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(serve())
