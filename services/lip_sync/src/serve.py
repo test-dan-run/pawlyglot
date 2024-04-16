@@ -1,7 +1,10 @@
 import yaml
 import subprocess
+import tempfile
 from typing import List, Tuple
 import logging
+from uuid import uuid4
+from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 
 import cv2
@@ -12,10 +15,20 @@ from PIL import Image
 from tqdm import tqdm
 from facenet_pytorch import MTCNN
 
+import ls_pb2
+import ls_pb2_grpc
+
 from wav2lip.audio import melspectrogram
 from wav2lip.wav2lip_onnx import Wav2LipOnnx
 
-class LipSyncer:
+def save_chunks_to_file(chunks, filename):
+    """writer incoming buffer chunks into file"""
+
+    with open(filename, "wb") as f:
+        for chunk in chunks:
+            f.write(chunk.buffer)
+
+class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
     def __init__(self, config_path: str):
 
         with open(config_path, "r") as fr:
@@ -41,6 +54,10 @@ class LipSyncer:
         self.wav2lip_batch_size = cfg["wav2lip"]["batch_size"]
 
         self.video_frames = {}
+
+    def _generate_id(self):
+        # e.g. '201902-0309-0347-3de72c98-4004-45ab-980f-658ab800ec5d'
+        return datetime.now().strftime('%Y%m-%d%H-%M%S-') + str(uuid4())
 
     def load_video(self, video_filepath: str) -> Tuple[List[np.ndarray], int]:
 
@@ -107,7 +124,7 @@ class LipSyncer:
         else:
             faces = [frame[y1:y2, x1:x2] for frame, (y1, y2, x1, x2) in zip(frames, coords)]
 
-        return np.asarray(faces), coords
+        return faces, coords
 
     def store_all_bboxes(self, idx: str, face_frames: np.ndarray, face_coords: List[List[int]]):
 
@@ -196,6 +213,89 @@ class LipSyncer:
         command = f'ffmpeg -y -i {audio_path} -i /lipsync/temp/temp.avi -strict -2 -q:v 1 {output_path}'
         subprocess.call(command, shell=True)
 
+    def facedetect(self, request_iterator, context):
+
+        metadata = context.invocation_metadata()
+
+        fps = None
+        for key, value in metadata:
+            if key != "fps":
+                continue
+            fps = value
+        assert isinstance(fps, int), "fps metadata not found in request."
+
+        embed_id = self._generate_id()
+
+        video_frames = []
+        for req in request_iterator:
+            frame = req.image
+            if self.image_resize_factor > 1:
+                frame = cv2.resize(frame,
+                                   (frame.shape[1]//self.image_resize_factor,
+                                    frame.shape[0]//self.image_resize_factor))
+
+            video_frames.append(frame)
+        self.store_video_frames(video_frames, fps, embed_id)
+        face_frames, face_bboxes = self.generate_all_face_bboxes(video_frames)
+        self.store_all_bboxes(embed_id, face_frames, face_bboxes)
+
+        return embed_id
+
+    def lipsync(self, request_iterator, context):
+
+        metadata = context.invocation_metadata()
+
+        embed_id = None
+        for key, value in metadata:
+            if key != "embed_id":
+                continue
+            embed_id = value
+        assert isinstance(embed_id, str), "embed_id metadata not found in request."
+
+        tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav")
+        save_chunks_to_file(request_iterator, tmp_wav.name)
+        logging.info("File loaded and saved to: %s", tmp_wav.name)
+
+        target_vid = self.video_frames[embed_id]
+
+        wav = self.load_audio(tmp_wav.name)
+        mel_chunks = self.generate_all_mel_chunks(wav, target_vid["fps"])
+
+        if len(mel_chunks) > len(target_vid["frames"]):
+            num_to_append = len(target_vid["frames"]) - len(mel_chunks)
+
+            last_half_frames = target_vid["frames"][-round(num_to_append/2):]
+            last_half_frames_flip = last_half_frames.copy().reverse()
+
+            target_vid["frames"] = target_vid["frames"] + last_half_frames_flip + last_half_frames
+
+            last_half_face_frames = target_vid["face_frames"][-round(num_to_append/2):]
+            last_half_face_frames_flip = last_half_face_frames.copy().reverse()
+
+            target_vid["face_frames"] = target_vid["face_frames"] + last_half_face_frames_flip + last_half_face_frames
+
+            last_half_face_coords = target_vid["face_coords"][-round(num_to_append/2):]
+            last_half_face_coords_flip = last_half_face_coords.copy().reverse()
+
+            target_vid["face_coords"] = target_vid["face_coords"] + last_half_face_coords_flip + last_half_face_coords
+
+        output_frames = self.generate_all_outputs(
+            target_vid["frames"],
+            target_vid["face_frames"],
+            target_vid["face_coords"],
+            mel_chunks
+        )
+
+        self.write_out(
+                output_frames,
+                tmp_wav.name,
+                target_vid["fps"],
+                output_frames[0].shape[1],
+                output_frames[0].shape[0],
+                embed_id+".mp4"
+            )
+
+        
 
 if __name__ == "__main__":
 

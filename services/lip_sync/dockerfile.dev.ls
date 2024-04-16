@@ -1,4 +1,4 @@
-# docker build -t pawlyglot/detector:1.0.0-dev .
+# docker build -t pawlyglot/lipsync:1.0.0-dev .
 ARG PYTORCH_VERSION=2.1.0
 ARG CUDA_VERSION=11.8
 ARG CUDNN_VERSION=8
@@ -21,6 +21,6 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
 
 WORKDIR /lipsync
 
-COPY requirements.txt .
+COPY requirements.ls.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
