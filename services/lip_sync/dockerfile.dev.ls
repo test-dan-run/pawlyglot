@@ -24,3 +24,5 @@ WORKDIR /lipsync
 COPY requirements.ls.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
+
+CMD ["sh", "-c", "python3 -m grpc_tools.protoc -I ./src --python_out=./src --pyi_out=./src --grpc_python_out=./src ./src/ls.proto && python3 src/serve.py"]

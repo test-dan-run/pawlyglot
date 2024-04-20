@@ -5,3 +5,7 @@ facenet-pytorch==2.5.3
 onnxruntime-gpu==1.17.1
 opencv-python==4.9.0.80
 opencv-contrib-python==4.9.0.80
+
+# grpc tools
+grpcio==1.62.1
+grpcio-tools==1.62.1

@@ -3,22 +3,31 @@ syntax = "proto3";
 package vc;
 
 service LipSyncer {
-    rpc facedetect(stream FaceDetectRequest) returns (FaceDetectResponse) {}
+    rpc videotransfer(stream VideoTransferRequest) returns (VideoTransferResponse) {}
+    rpc facedetect(FaceDetectRequest) returns (FaceDetectResponse) {}
     rpc lipsync(stream LipSyncRequest) returns (stream LipSyncResponse) {}
 }
 
-message FaceDetectRequest {
-    bytes image = 1;
+message VideoTransferRequest {
+    bytes image_buffer = 1;
 }
 
-message FaceDetectResponse {
+message VideoTransferResponse {
     string embed_id = 1;
 }
 
+message FaceDetectRequest {
+    string embed_id = 1;
+}
+
+message FaceDetectResponse {
+    int32 reply = 1;
+}
+
 message LipSyncRequest {
-    bytes buffer = 1;
+    bytes audio_buffer = 1;
 }
 
 message LipSyncResponse {
-    bytes image = 1;
+    bytes image_buffer = 1;
 }

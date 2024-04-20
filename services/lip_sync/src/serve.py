@@ -1,3 +1,4 @@
+import os
 import yaml
 import subprocess
 import tempfile
@@ -7,7 +8,6 @@ from uuid import uuid4
 from datetime import datetime
 import asyncio
 from concurrent import futures
-import base64
 import grpc
 logging.basicConfig(level=logging.INFO)
 
@@ -27,12 +27,14 @@ from wav2lip.wav2lip_onnx import Wav2LipOnnx
 
 CHUNK_SIZE = 1024 * 1024
 
+os.makedirs("/temp", exist_ok=True)
+
 def save_chunks_to_file(chunks, filename):
     """writer incoming buffer chunks into file"""
 
     with open(filename, "wb") as f:
         for chunk in chunks:
-            f.write(chunk.buffer)
+            f.write(chunk.audio_buffer)
 
 def get_encoded_chunks(encoded: str):
 
@@ -44,6 +46,16 @@ def get_encoded_chunks(encoded: str):
             return
         idx += 1
         yield ls_pb2.LipSyncResponse(buffer=piece)
+
+def get_file_chunks(filepath: str):
+    """ Splits audio file into chunks """
+
+    with open(filepath, "rb") as f:
+        while True:
+            piece = f.read(CHUNK_SIZE)
+            if len(piece) == 0:
+                return
+            yield ls_pb2.LipSyncResponse(image_buffer=piece)
 
 class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
     def __init__(self, config_path: str):
@@ -181,7 +193,7 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
             coords_batch = face_coords[i:i+batch_size]
             mel_batch = np.asarray(mel_chunks[i:i+batch_size])
 
-            face_batch = face_batch[:,:,:,::-1]
+            face_batch = np.asarray(face_batch)[:,:,:,::-1]
 
             face_masked_batch = face_batch.copy()
             face_masked_batch[:, self.face_resize[0]//2:] = 0
@@ -223,49 +235,41 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
 
         video_out.release()
 
-        command = f'ffmpeg -y -i {audio_path} -i /lipsync/temp/temp.avi -strict -2 -q:v 1 {output_path}'
-        subprocess.call(command, shell=True)
+        command = ['ffmpeg', '-y', '-i', audio_path , '-i', '/lipsync/temp/temp.avi', '-strict', '-2', '-c:v', 'h264', '-q:v', '1', output_path]
+        subprocess.run(command)
+
+    def _generate_id(self):
+        # e.g. '201902-0309-0347-3de72c98-4004-45ab-980f-658ab800ec5d'
+        return datetime.now().strftime('%Y%m-%d%H-%M%S-') + str(uuid4())
 
     def videotransfer(self, request_iterator, context):
-
         metadata = context.invocation_metadata()
 
-        fps, embed_id = None, None
+        filename = None
         for key, value in metadata:
-            if key == "fps":
-                fps = int(value)
-            elif key == "embed_id":
-                embed_id = value
-        assert isinstance(fps, int), "fps metadata not found in request."
-        assert isinstance(embed_id, str), "embed_id metadata not found in request."
+            if key != "filename":
+                continue
+            filename = value
+        assert isinstance(filename, str), "filename metadata not found in request."
 
-        total_buffer = b""
+        output_path = f"/temp/{filename}"
+        embed_id = self._generate_id()
 
-        for req in request_iterator:
-            total_buffer += req.image_buffer
+        total_buffer = bytearray()
+        for request in request_iterator:
+            total_buffer.extend(request.image_buffer)
 
-        image_buffer = np.frombuffer(req.image_buffer, dtype=np.uint8)
-        frame = cv2.imdecode(image_buffer, cv2.IMREAD_COLOR)
+        with open(output_path, 'wb') as f:
+            f.write(total_buffer)
 
-        if self.image_resize_factor > 1:
-            frame = cv2.resize(frame,
-                                (frame.shape[1]//self.image_resize_factor,
-                                frame.shape[0]//self.image_resize_factor))
+        video_frames, fps = self.load_video(output_path)
+        self.store_video_frames(video_frames, fps, embed_id)
 
-        if not self.video_frames.get(embed_id):
-            self.video_frames[embed_id] = {
-                "frames": [],
-                "fps": fps,
-                "height": frame.shape[0],
-                "width": frame.shape[1]
-            }
-        self.video_frames[embed_id]["frames"].append(frame)
+        return ls_pb2.VideoTransferResponse(embed_id=embed_id)
 
+    def facedetect(self, request: ls_pb2.FaceDetectRequest, context):
 
-        return ls_pb2.VideoTransferResponse(reply=1)
-
-    def facedetect(self, embed_id, context):
-
+        embed_id = request.embed_id
         face_frames, face_bboxes = self.generate_all_face_bboxes(self.video_frames[embed_id]["frames"])
         self.store_all_bboxes(embed_id, face_frames, face_bboxes)
 
@@ -310,6 +314,10 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
 
             target_vid["face_coords"] = target_vid["face_coords"] + last_half_face_coords_flip + last_half_face_coords
 
+        target_vid["frames"] = target_vid["frames"][:len(mel_chunks)]
+        target_vid["face_frames"] = target_vid["face_frames"][:len(mel_chunks)]
+        target_vid["face_coords"] = target_vid["face_coords"][:len(mel_chunks)]
+
         output_frames = self.generate_all_outputs(
             target_vid["frames"],
             target_vid["face_frames"],
@@ -325,24 +333,20 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
                 output_frames[0].shape[0],
                 embed_id+".mp4"
             )
-        
-        out = cv2.imread(embed_id+".mp4")
-        _, buffer = cv2.imencode(".jpg", out)
-        out_base64 = base64.b64encode(buffer).decode("utf-8")
 
-        chunks_generator = get_encoded_chunks(out_base64)
+        chunks_generator = get_file_chunks(embed_id+".mp4")
         return chunks_generator
 
 async def serve():
     """ Serves TTS Model """
 
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=1))
-    ls_pb2_grpc.add_VoiceClonerServicer_to_server(LipSyncerServer("./config.yaml"), server)
-    server.add_insecure_port("[::]:50055")
-    await server.start()
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    ls_pb2_grpc.add_LipSyncerServicer_to_server(LipSyncerServer("/lipsync/src/config.yaml"), server)
+    server.add_insecure_port("[::]:50056")
+    server.start()
 
-    print("Server started, listening on port 50055")
-    await server.wait_for_termination()
+    print("Server started, listening on port 50056")
+    server.wait_for_termination()
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

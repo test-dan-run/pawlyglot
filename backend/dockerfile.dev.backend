@@ -11,5 +11,6 @@ CMD ["sh", "-c", "python3 -m grpc_tools.protoc -I ./src \
      ./src/vad.proto \
      ./src/asr.proto \
      ./src/mt.proto \
-     ./src/vc.proto \     
+     ./src/vc.proto \
+     ./src/ls.proto \     
      && python3 src/serve.py"]

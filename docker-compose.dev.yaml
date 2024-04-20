@@ -85,7 +85,28 @@ services:
       memlock: -1
       stack: 67108864
     shm_size: 16gb  
-  
+
+  ls:
+    stdin_open: true
+    tty: true
+    image: pawlyglot/lip_sync:1.0.0-dev
+    build:
+      context: ./services/lip_sync
+      dockerfile: dockerfile.dev.ls
+    volumes:
+      - ./services/lip_sync:/lipsync
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    ports:
+      - 50056:50056
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb  
+
   backend:
     stdin_open: true
     tty: true
@@ -98,4 +119,4 @@ services:
       - ./examples:/examples
     ports:
       - 7860:7860
-    command: ["python3", "serve.py"]
+    command: ["python3", "serve_makeshift.py"]

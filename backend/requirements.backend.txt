@@ -1,3 +1,7 @@
 gradio==4.17.0
 yt-dlp==2023.11.16
 librosa==0.10.1
+ffmpeg==1.4
+scikit-image==0.22.0
+opencv-python==4.9.0.80
+opencv-contrib-python==4.9.0.80

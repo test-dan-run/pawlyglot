@@ -13,7 +13,7 @@ message VideoTransferRequest {
 }
 
 message VideoTransferResponse {
-    int32 reply = 1;
+    string embed_id = 1;
 }
 
 message FaceDetectRequest {
@@ -29,5 +29,5 @@ message LipSyncRequest {
 }
 
 message LipSyncResponse {
-    string image_buffer = 1;
+    bytes image_buffer = 1;
 }
