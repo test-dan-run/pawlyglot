@@ -128,9 +128,11 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
         with torch.no_grad():
             for i in tqdm(range(0, len(frames), self.face_batch_size)):
                 boxes_batch, _ = self.face_detector.detect(frames[i:i+self.face_batch_size])
-                bboxes.extend([boxes[0] for boxes in boxes_batch])
+                bboxes.extend([boxes[0] if boxes is not None else np.nan for boxes in boxes_batch])
 
         def add_pads(rect, frame):
+            if rect is np.nan:
+                return np.nan
             rect = np.clip(rect, 0, None)
             x1, y1, x2, y2 = map(int, rect)
 
@@ -142,12 +144,13 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
 
         coords = [add_pads(rect, frame) for rect, frame in zip(bboxes, frames)]
         if self.face_resize:
+            # c = (y1, y2, x1, x2)
             faces = [
                 cv2.resize(
-                    frame[y1:y2, x1:x2],
-                    self.face_resize) for frame, (y1, y2, x1, x2) in zip(frames, coords)]
+                    frame[c[0]:c[1], c[2]:c[3]],
+                    self.face_resize) if c is not np.nan else np.nan for frame, c in zip(frames, coords)]
         else:
-            faces = [frame[y1:y2, x1:x2] for frame, (y1, y2, x1, x2) in zip(frames, coords)]
+            faces = [frame[c[0]:c[1], c[2]:c[3]] if c is not np.nan else np.nan for frame, c in zip(frames, coords)]
 
         return faces, coords
 
@@ -188,11 +191,26 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
 
         batch_size = self.wav2lip_batch_size
         for i in tqdm(range(0, num_chunks, batch_size)):
-            frame_batch = np.asarray(video_frames[i:i+batch_size])
-            face_batch = face_frames[i:i+batch_size]
-            coords_batch = face_coords[i:i+batch_size]
-            mel_batch = np.asarray(mel_chunks[i:i+batch_size])
 
+            face_batch = face_frames[i:i+batch_size]
+            nan_indices = [i for i,v in enumerate(face_batch) if v is np.nan]
+            if len(nan_indices) == len(face_batch):
+                output_frames.extend(frame_batch)
+                continue
+
+            nan_frames = []
+            frame_batch = video_frames[i:i+batch_size]
+            mel_batch = mel_chunks[i:i+batch_size]
+            coords_batch = face_coords[i:i+batch_size]
+
+            for idx in sorted(nan_indices, reverse=True):
+                nan_frames.append(frame_batch.pop(idx))
+                del mel_batch[idx]
+                del coords_batch[idx]
+                del face_batch[idx]
+
+            frame_batch = np.asarray(frame_batch)
+            mel_batch = np.asarray(mel_batch)
             face_batch = np.asarray(face_batch)[:,:,:,::-1]
 
             face_masked_batch = face_batch.copy()
@@ -204,7 +222,7 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
                 ])
 
             face_batch = np.transpose(face_batch, (0,3,1,2)).astype("float32")
-            mel_batch = np.transpose(mel_batch, (0,3,1,2)).astype("float32")     
+            mel_batch = np.transpose(mel_batch, (0,3,1,2)).astype("float32")
 
 
             preds = self.wav2lip.infer(mels=mel_batch, imgs=face_batch)
@@ -216,6 +234,10 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
 
                 f[y1:y2, x1:x2] = p
                 output_frames.append(f)
+            
+            nan_frames.reverse()
+            for nan_idx, nan_frame in zip(nan_indices, nan_frames):
+                output_frames.insert(i+nan_idx, nan_frame)
 
         return output_frames
     
@@ -300,17 +322,20 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
             num_to_append = len(target_vid["frames"]) - len(mel_chunks)
 
             last_half_frames = target_vid["frames"][-round(num_to_append/2):]
-            last_half_frames_flip = last_half_frames.copy().reverse()
+            last_half_frames_flip = last_half_frames.copy()
+            last_half_frames_flip.reverse()
 
             target_vid["frames"] = target_vid["frames"] + last_half_frames_flip + last_half_frames
 
             last_half_face_frames = target_vid["face_frames"][-round(num_to_append/2):]
-            last_half_face_frames_flip = last_half_face_frames.copy().reverse()
+            last_half_face_frames_flip = last_half_face_frames.copy()
+            last_half_face_frames_flip.reverse()
 
             target_vid["face_frames"] = target_vid["face_frames"] + last_half_face_frames_flip + last_half_face_frames
 
             last_half_face_coords = target_vid["face_coords"][-round(num_to_append/2):]
-            last_half_face_coords_flip = last_half_face_coords.copy().reverse()
+            last_half_face_coords_flip = last_half_face_coords.copy()
+            last_half_face_coords_flip.reverse()
 
             target_vid["face_coords"] = target_vid["face_coords"] + last_half_face_coords_flip + last_half_face_coords
 
@@ -333,6 +358,8 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
                 output_frames[0].shape[0],
                 embed_id+".mp4"
             )
+        
+        del self.video_frames[embed_id]
 
         chunks_generator = get_file_chunks(embed_id+".mp4")
         return chunks_generator

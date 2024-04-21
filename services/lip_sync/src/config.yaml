@@ -13,7 +13,7 @@ face:
     x2: 0
 
 wav2lip: 
-  model_path: /lipsync/models/wav2lip_gan.onnx
+  model_path: /lipsync/models/wav2lip.onnx
   sample_rate: 16000
   mel_step_size: 16
   batch_size: 32
