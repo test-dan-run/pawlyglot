@@ -195,7 +195,7 @@ class LipSyncerServer(ls_pb2_grpc.LipSyncerServicer):
             face_batch = face_frames[i:i+batch_size]
             nan_indices = [i for i,v in enumerate(face_batch) if v is np.nan]
             if len(nan_indices) == len(face_batch):
-                output_frames.extend(frame_batch)
+                output_frames.extend(video_frames[i:i+batch_size])
                 continue
 
             nan_frames = []
